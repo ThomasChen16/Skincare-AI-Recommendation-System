@@ -1,0 +1,297 @@
+# LESSON 3: Text Preprocessing
+# This is the foundation of NLP - cleaning and standardizing text
+
+import re # regular expressions for text cleaning
+from collections import Counter
+
+# User Profile Class to store user info
+class UserProfile:
+    def __init__(self):
+        self.skin_types = []
+        self.concerns = []
+        self.goals = []
+        
+    def add_skin_type(self, skin_type):
+        if skin_type and skin_type not in self.skin_types:
+            self.skin_types.append(skin_type)
+        
+    
+    def add_concern(self, concern):
+        if concern and concern not in self.concerns:
+            self.concerns.append(concern)
+                
+    def add_goal(self, goal):
+        if goal and goal not in self.goals:
+            self.goals.append(goal)
+        
+
+# Function to determine what to ask next based on missing info one at a time in user profile
+def what_to_ask_next(question_number):
+    if question_number == 1:
+        return "Tell me about your skin type. How would you describe it? "
+    elif question_number == 2:
+        return "What concerns do you have about your skin? "
+    elif question_number == 3:
+        return "What are your skincare goals? "
+    else:
+        return "Thanks for sharing!"
+    
+# Function to generate follow-up question based on missing info
+def generate_followup_questions(missing_info):
+    if missing_info == "skin_type":
+        return "Can you tell me more about your skin? For example, is it oily, dry, or a mix of both? "
+    elif missing_info == "concerns":
+        return "Can you tell me more about specific skin concerns are you hoping to address? For example, would it be acne, aging, sensitivity, or something else? "
+    elif missing_info == "goals":
+        return "Can you tell me more about your main skincare goals? Do you hope to improve hydration, reduce wrinkles, or something else? "
+    
+# Function to check if there is missing info after extracting from user input if so we call generate_followup_questions
+def check_missing_info_and_ask(user_profile):
+    if user_profile.skin_types == []:        
+            user_input_skin_type = input(generate_followup_questions("skin_type"))
+            for skin_type in extract_all_skin_type(user_input_skin_type):
+                user_profile.add_skin_type(skin_type)
+            return True
+            
+    elif user_profile.concerns == []:
+            user_input_concerns = input(generate_followup_questions("concerns"))
+            for concern in extract_all_concerns(user_input_concerns):
+                user_profile.add_concern(concern)
+            return True
+    
+    elif user_profile.goals == []:
+            user_input_goals = input(generate_followup_questions("goals"))
+            for goal in extract_all_goals(user_input_goals):
+                user_profile.add_goal(goal)
+            return True
+        
+    return False
+
+# Main Conservation Function Loop
+def have_conversation():
+    print("Welcome to the Skincare AI Consultant!\n")
+    
+    # Create user profile
+    user_profile = UserProfile()
+    number = 1
+        
+    # Main Conversation Loop
+    while True:
+        # Determine what to ask next
+        question = what_to_ask_next(number)
+        if number <= 3:
+            number += 1
+        
+        # Print question
+        print(f"Bot: {question}")
+        
+        # Get user input
+        user_input = input("You: ")
+        print() # new line for readability
+        
+        # Extract information
+        skin_types = extract_all_skin_type(user_input)
+        concerns = extract_all_concerns(user_input)
+        goals = extract_all_goals(user_input)
+        
+        
+        # Add to user_profile
+        if skin_types:
+            for skin_type in skin_types:
+                user_profile.add_skin_type(skin_type)
+        if concerns:
+            for concern in concerns:
+                user_profile.add_concern(concern)
+        if goals:
+            for goal in goals:
+                user_profile.add_goal(goal)
+
+        # Check if any information is missing and update profile
+        if question == "Thanks for sharing!":
+            check_missing_info_and_ask(user_profile)
+            print("Great! I have all the information I need. Is there anything else you'd like to share?")
+
+            user_done = input("You: ")
+            print()
+            if user_done.lower() in ['no', 'nothing', 'that\'s all', 'quit', 'exit']:
+                print("Bot: Thank you for sharing your skincare information! Here is what I gathered:\n")
+                print(f"Detected Skin Type: {user_profile.skin_types if user_profile.skin_types else 'Not detected'}")
+                print(f"Detected Concerns: {user_profile.concerns if user_profile.concerns else 'None detected'}")
+                print("Bot: I'll use this information to provide you with personalized skincare recommedations!")
+                break
+            
+# ==================== TEXT PREPROCESSING FUNCTIONS ====================
+
+# Step 1: Basic Text Cleaning
+def clean_text(text):
+    """
+    Clean user input by:
+    1. Converting to lowercase
+    2. Removing special characters
+    3. Removing extra spaces
+    """
+    text = text.lower()  # "My SKIN is Oily" → "my skin is oily"
+    text = re.sub(r'[^a-z0-9\s]', '', text)  # Remove punctuation
+    text = re.sub(r'\s+', ' ', text).strip()  # Remove extra spaces
+    return text
+
+# Step 2: Tokenization (Breaking text into words)
+def tokenize(text):
+    """
+    Split text into individual words (tokens)
+    """
+    return text.split()
+
+# Step 3: Synonym Matching (Better than exact keywords)
+SKIN_TYPE_SYNONYMS = {
+    "oily": ["oily", "greasy", "shiny", "shine", "slick", "glossy", "oil", "slimy"],
+    "dry": ["dry", "flaky", "tight", "rough", "dehydrated", "parched", "crispy", "cracked"],
+    "combination": ["combination", "combo", "mixed", "both"],
+    "sensitive": ["sensitive", "reactive", "irritated", "red", "inflamed"],
+    "normal": ["normal", "balanced", "regular", "average", "not oily", "not dry", "not sensitive", "balance", "well", "healthy"]
+}
+
+CONCERN_SYNONYMS = {
+    "acne": ["acne", "pimple", "breakout", "blemish", "zit", "spots", "pimples", "zits"],
+    "aging": ["aging", "wrinkle", "wrinkles", "lines", "fine lines", "age"],
+    "sensitivity": ["sensitivity", "redness", "irritation", "reactive", "itchy"],
+    "sun protection": ["sun", "sunscreen", "uv", "spf", "sunburn"]
+}
+
+GOALS_SYNONYMS = {
+    "clear_skin": ["clear", "smooth", "clean", "nice", "get rid of", "remove", "eliminate"],
+    "anti_aging": ["prevent wrinkles", "younger", "youthful", "anti aging", "reduce lines"],
+    "hydration": ["hydrate", "moisturize", "plump", "dewy", "hydration"],
+    "protection": ["protect", "shield", "prevent damage", "sun protection"],
+    "soothe": ["soothe", "calm", "comfort", "relieve", "reduce redness"]
+}
+
+# Step 4: Find matches in user input
+def extract_all_skin_type(text):
+    """
+    Find skin type from user's natural language input
+    """
+    text = clean_text(text)
+    tokens = tokenize(text)
+    Negation = {"not", "no", "never", "dont", "isnt", "doesnt"}
+    found_skin_types = []
+    
+    # Check each token against our synonyms
+    for skin_type, synonyms in SKIN_TYPE_SYNONYMS.items(): # key value pairs
+        for i, token in enumerate(tokens): # 
+            if token in synonyms:
+                is_negative = False
+                # Check for negative words 2 tokens before
+                for j in range(max(0, i-2), i):
+                    if tokens[j] in Negation: # If inside Negation set
+                        is_negative = True
+                        break
+                if not is_negative:
+                    found_skin_types.append(skin_type)
+                    break
+    
+    return found_skin_types
+
+# Step 5: Handle Multiple Concerns
+def extract_all_concerns(text):
+    """
+    Extract ALL concerns mentioned (not just first one)
+    """
+    text = clean_text(text)
+    tokens = tokenize(text)
+    
+    found_concerns = []
+    for concern, synonyms in CONCERN_SYNONYMS.items():
+        for token in tokens:
+            if token in synonyms and concern not in found_concerns:
+                found_concerns.append(concern)
+                break
+    
+    return found_concerns
+
+# Step 6: Extract Goals 
+def extract_all_goals(text):
+    """
+    Extract ALL goals mentioned
+    """
+    text = clean_text(text)
+    tokens = tokenize(text)
+    
+    found_goals = []
+    for goal, synonyms in GOALS_SYNONYMS.items():
+        for token in tokens: # check the sentence tokens
+            if token in synonyms and goal not in found_goals: # if token matches and goal not already found
+                found_goals.append(goal)
+                break
+            
+    return found_goals
+    
+# ==================== TESTING EXAMPLES ====================
+
+print("=== LESSON 3: Text Preprocessing Examples ===\n")
+
+# Example 1: Basic cleaning
+print("Example 1: Text Cleaning")
+messy_text = "My SKIN is really OILY!!! Help me please..."
+clean = clean_text(messy_text)
+print(f"Original: {messy_text}")
+print(f"Cleaned: {clean}")
+print()
+
+# Example 2: Tokenization
+print("Example 2: Tokenization")
+sentence = "i have dry flaky skin"
+tokens = tokenize(sentence)
+print(f"Sentence: {sentence}")
+print(f"Tokens: {tokens}")
+print()
+
+# Example 3: Extract skin type from natural language
+print("Example 3: Extracting Skin Type")
+test_inputs = [
+    "My face gets really shiny by afternoon",
+    "I have super dry and flaky patches",
+    "My skin is a mix of oily and dry areas",
+    "My face feels tight and dehydrated"
+]
+
+for user_input in test_inputs:
+    skin_type = extract_all_skin_type(user_input)
+    print(f"Input: '{user_input}'")
+    print(f"Detected Skin Type: {skin_type}")
+    print()
+
+# Example 4: Extract concerns
+print("Example 4: Extracting Concerns")
+test_concerns = [
+    "I'm getting wrinkles around my eyes",
+    "I keep breaking out with pimples",
+    "My skin is red and irritated",
+    "I have acne and fine lines"  # Multiple concerns!
+]
+
+for user_input in test_concerns:
+    concern = extract_all_concerns(user_input)
+    all_concerns = extract_all_concerns(user_input)
+    print(f"Input: '{user_input}'")
+    print(f"First Concern: {concern}")
+    print(f"All Concerns: {all_concerns}")
+    print()
+
+# ==================== YOUR TURN ====================
+print("\n=== YOUR TURN: Try It Out ===")
+print("Type a sentence describing your skin (or 'quit' to exit):\n")
+have_conversation()
+
+#while True:
+ #   user_input = input("You: ")
+  #  if user_input.lower() == 'quit':
+   #     break
+    
+   # skin_type = extract_all_skin_type(user_input)
+  #  concerns = extract_all_concerns(user_input)
+    
+  #  print(f"Detected Skin Type: {skin_type if skin_type else 'Not detected'}")
+  #  print(f"Detected Concerns: {concerns if concerns else 'None detected'}")
+  #  print()
+    
