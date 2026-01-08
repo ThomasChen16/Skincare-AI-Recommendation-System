@@ -7,6 +7,35 @@ from collections import Counter
 from sentence_transformers import SentenceTransformer, util
 model = SentenceTransformer('all-MiniLM-L6-v2')
 
+from sklearn.tree import DecisionTreeClassifier # decision tree model for classification skin products
+import pandas as pd # organize data in a table and manipulate it easily like a spreadsheet
+from sklearn.preprocessing import LabelEncoder # for encoding text labels to numbers because sklearn models only understand numbers
+
+skinData = {
+    "skin_type": ["oily", "dry", "combination", "sensitive", "normal"],
+    "concern": ["acne", "aging", "sensitivity", "sun protection", "dryness"],
+    "goal": ["clear skin", "aging", "sensitivity", "sun protection", "hydration"],
+    "product": ["cleanser", "serum", "moisturizer", "sunscreen"]
+}
+
+df = pd.DataFrame(skinData) # create table with skin data
+
+encoder = {}
+for column in df.columns:
+    encoder[column] = LabelEncoder() # create a label encoder for each column
+    df[column] = encoder[column].fit_transform(df[column]) # encode text labels to numbers
+
+X = df[["skin_type", "concern", "goal"]] # inputs
+y = df["product"] # output
+
+model = DecisionTreeClassifier( # create decision tree model
+    max_depth = 3, # prevent overfitting by limiting depth of tree
+    min_samples_leaf = 1, # minimum samples required to be at a leaf node
+    random_state = 42 # for reproducibility
+)
+
+model.fit(X, y) # train model on data
+
 
 # User Profile Class to store user info
 class UserProfile:
@@ -178,6 +207,12 @@ def extract_all_concerns_semantics(text, min_similarity=0.35, margin=0.08):
             "concern about sun exposure and uv damage, need for sunscreen or spf, "
             "preventing sunburn, protecting skin from uv rays, photoaging, "
             "hyperpigmentation from sun exposure, and daily sun protection habits"
+        ),
+        
+        "hydration": (
+            "concern about dry and dehydrated skin, need for deep hydration and moisture, "
+            "relieving tightness or flakiness, improving skin barrier function, achieving plump "
+            "and dewy skin, and maintaining long term skin hydration"
         )
     }
     
