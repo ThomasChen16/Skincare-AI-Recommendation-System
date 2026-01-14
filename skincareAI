@@ -7,35 +7,7 @@ from collections import Counter
 from sentence_transformers import SentenceTransformer, util
 model = SentenceTransformer('all-MiniLM-L6-v2')
 
-from sklearn.tree import DecisionTreeClassifier # decision tree model for classification skin products
-import pandas as pd # organize data in a table and manipulate it easily like a spreadsheet
-from sklearn.preprocessing import LabelEncoder # for encoding text labels to numbers because sklearn models only understand numbers
-
-skinData = {
-    "skin_type": ["oily", "dry", "combination", "sensitive", "normal"],
-    "concern": ["acne", "aging", "sensitivity", "sun protection", "dryness"],
-    "goal": ["clear skin", "aging", "sensitivity", "sun protection", "hydration"],
-    "product": ["cleanser", "serum", "moisturizer", "sunscreen"]
-}
-
-df = pd.DataFrame(skinData) # create table with skin data
-
-encoder = {}
-for column in df.columns:
-    encoder[column] = LabelEncoder() # create a label encoder for each column
-    df[column] = encoder[column].fit_transform(df[column]) # encode text labels to numbers
-
-X = df[["skin_type", "concern", "goal"]] # inputs
-y = df["product"] # output
-
-model = DecisionTreeClassifier( # create decision tree model
-    max_depth = 3, # prevent overfitting by limiting depth of tree
-    min_samples_leaf = 1, # minimum samples required to be at a leaf node
-    random_state = 42 # for reproducibility
-)
-
-model.fit(X, y) # train model on data
-
+from collections import defaultdict # for product score and reasons (less if statements as keys are created on the go)
 
 # User Profile Class to store user info
 class UserProfile:
@@ -43,6 +15,8 @@ class UserProfile:
         self.skin_types = []
         self.concerns = []
         self.goals = []
+        
+        self.confidence = {}
         
     def add_skin_type(self, skin_type):
         if skin_type not in self.skin_types:
@@ -56,6 +30,12 @@ class UserProfile:
     def add_goal(self, goal):
         if goal not in self.goals:
             self.goals.append(goal)
+    
+    def add_confidence(self, label, score):
+        if label not in self.confidence:
+            self.confidence[label] = score
+        else:
+            self.confidence[label] = max(self.confidence[label], score)
         
 
 # Function to determine what to ask next based on missing info one at a time in user profile
@@ -70,7 +50,6 @@ def what_to_ask_next(question_number):
         return "Thanks for sharing!\n"
 
 
-    
 # Function to generate follow-up question based on missing info
 def generate_followup_questions(missing_info):
     if missing_info == "skin_type":
@@ -79,6 +58,7 @@ def generate_followup_questions(missing_info):
         return "Can you tell me more about specific skin concerns are you hoping to address? For example, would it be acne, aging, sensitivity, or something else? "
     elif missing_info == "goals":
         return "Can you tell me more about your main skincare goals? Do you hope to improve hydration, reduce wrinkles, or something else? "
+    
     
 # Function to check if there is missing info after extracting from user input if so we call generate_followup_questions
 def check_missing_info_and_ask(user_profile):
@@ -102,19 +82,22 @@ def check_missing_info_and_ask(user_profile):
             skin_types = extract_all_skin_type_semantics(user_input)
             for item in skin_types:
                 user_profile.add_skin_type(item["label"])
+                user_profile.add_confidence(item["label"], item["score"])
         elif missing == "concerns":
             concerns = extract_all_concerns_semantics(user_input)
             for item in concerns:
                 user_profile.add_concern(item["label"])
+                user_profile.add_confidence(item["label"], item["score"])
         elif missing == "goals":
             goals = extract_all_goals_semantics(user_input)
             for item in goals:
                 user_profile.add_goal(item["label"])
+                user_profile.add_confidence(item["label"], item["score"])
 
         
 # ==================== ML Semantics ====================
 
-def extract_all_skin_type_semantics(text, min_similarity=0.35, margin=0.08):
+def extract_all_skin_type_semantics(text, min_similarity=0.35):
         
     # embed user text
     user_emb = model.encode(text)
@@ -165,21 +148,13 @@ def extract_all_skin_type_semantics(text, min_similarity=0.35, margin=0.08):
     scores.sort(key=lambda x: x[1], reverse=True)
     
     best_score = scores[0][1]
-    detected = []
     
-    for label, score in scores:
-        # keep labels that are:
-        # 1. reasonably similar
-        # 2. close to the best score
-        # purpose to find other labels that are also good matches (multi answers)
-        if score >= min_similarity and (best_score - score) <= margin:
-            detected.append((label, score))
-    
-    
-    return [
-        {"label": label, "score": round(score, 3)}
-        for label, score in detected
-    ]
+    if best_score < min_similarity:
+        return []
+    else: 
+        return [
+            {"label": scores[0][0], "score": round(best_score, 3)}
+        ]
 
 def extract_all_concerns_semantics(text, min_similarity=0.35, margin=0.08):
     user_emb = model.encode(text)
@@ -232,6 +207,10 @@ def extract_all_concerns_semantics(text, min_similarity=0.35, margin=0.08):
     detected = []
     
     for label, score in scores:
+        # keep labels that are:
+        # 1. reasonably similar
+        # 2. close to the best score
+        # purpose to find other labels that are also good matches (multi answers)
         if score >= min_similarity and (best_score - score) <= margin:
             detected.append((label, score))
     
@@ -296,12 +275,180 @@ def extract_all_goals_semantics(text, min_similarity=0.35, margin=0.08):
         if score >= min_similarity and (best_score - score) <= margin:
             detected.append((label, score))
 
+    if not detected:
+        return []
+    else:        
+        return [
+            {"label": label, "score": round(score, 3)}
+            for label, score in detected
+        ]
+
+
+# ==================== ML Semantics END ====================
+
+# ================ PRODUCT RECOMMEDATIONS ==================
+def recommend_products(user_profile):
+    # Main recommendation functions
+    # Returns ranked list of products, score, reasons
+    
+    # product -> score
+    product_scores = defaultdict(float)
+    
+    # product -> reason for score
+    product_reasons = defaultdict(list)
+    
+    # +3 means essential for solving the primary problem
+    # +2 means very helpful in addressing the key aspects of the problem
+    # +1 means somewhat helpful or a nice to have for the problem (optional)
+    # ------- Skin Type-------------------------
+    for skin_type in user_profile.skin_types:
+        # confidence is the score rating from the extract functions
+        confidence = user_profile.confidence.get(skin_type, 1.0) 
+
+        if skin_type == "oily":
+            product_scores["Salicylic Acid Cleanser"] += 3 * confidence
+            product_reasons["Salicylic Acid Cleanser"].append(
+                "Salicylic acid helps to exfoliate and clear out clogged pores, which is beneficial for oily skin prone to acne and breakouts."
+            )
             
-    return [
-        {"label": label, "score": round(score, 3)}
-        for label, score in detected
-    ]
-       
+            product_scores["Gel Moisturizer"] += 2 * confidence
+            product_reasons["Gel Moisturizer"].append(
+                "Gel moisturizers provide hydration without adding excess oil, making them suitable for oily skin to maintain moisture balance without clogging pores."
+            )
+            
+        elif skin_type == "dry":
+            product_scores["Rich Cream Moisturizer"] += 3 * confidence
+            product_reasons["Rich Cream Moisturizer"].append(
+                "Rich cream moisturizers are designed to provide intense hydration and nourishment, which is essential for dry skin that lacks moisture and may feel tight or flaky."
+            )
+            
+            product_scores["Hydrating Serum"] += 2 * confidence
+            product_reasons["Hydrating Serum"].append(
+                "Hydrating serums often contain ingredients like hyaluronic acid that can attract and retain moisture in the skin, making them beneficial for dry skin to boost hydration levels."
+            )
+        elif skin_type == "sensitive":
+            product_scores["Barrier Repair Moisturizer"] += 3 * confidence
+            product_reasons["Barrier Repair Moisturizer"].append(
+                "Barrier repair moisturizers contain ingredients that help to strengthen and restore the skin's natural barrier, which is crucial for sensitive skin that is prone to irritation and inflammation."
+            )
+            
+            product_scores["Gentle Fragence-Free Cleanser"] += 2 * confidence
+            product_reasons["Gentle Fragence-Free Cleanser"].append(
+                "Gentle fragrance-free cleansers are formulated to cleanse the skin without stripping away natural oils or causing irritation, making them ideal for sensitive skin that can react to harsh ingredients."
+            )
+        elif skin_type == "combination":
+            product_scores["Lightweight Barrier-Supporting Moisturizer"] += 3 * confidence
+            product_reasons["Lightweight Barrier-Supporting Moisturizer"].append(
+                "Lightweight barrier-supporting moisturizers provide balanced hydration and help maintain the skin's natural barrier without being too heavy or greasy, making them suitable for combination skin that has both oily and dry areas."
+            )
+            
+            product_scores["Salicylic Acid Cleanser"] += 2 * confidence
+            product_reasons["Salicylic Acid Cleanser"].append(
+                "Salicylic acid helps to exfoliate and clear out clogged pores, which is beneficial for oily skin prone to acne and breakouts."
+            )
+        elif skin_type == "normal":
+            product_scores["Broad-Spectrum Sunscreen"] += 3 * confidence
+            product_reasons["Broad-Spectrum Sunscreen"].append(
+                "Broad-spectrum sunscreen is essential for protecting the skin from harmful UV rays and preventing sun damage, which is important for maintaining healthy skin regardless of skin type."
+            )
+            
+            product_scores["Lightweight Moisturizer"] += 2 * confidence
+            product_reasons["Lightweight Moisturizer"].append(
+                "Lightweight moisturizers provide hydration without being too heavy, making them suitable for normal skin to maintain a balanced and healthy complexion."
+            )
+            
+    
+    # ------ Concerns -------------------------
+    for concern in user_profile.concerns:
+        if concern == "acne":
+            product_scores["Leave-On Salicylic Acid (BHA)"] += 3 * confidence
+            product_reasons["Leave-On Salicylic Acid (BHA)"].append(
+                "Leave-on salicylic acid (BHA) products are effective for treating acne because they penetrate deep into the pores to exfoliate and clear out excess oil, dead skin cells, and impurities that can lead to breakouts."
+            )
+            
+            product_scores["Lightweight Non-Comedogenic Moisturizer"] += 2 * confidence
+            product_reasons["Lightweight Non-Comedogenic Moisturizer"].append(
+                "Lightweight non-comedogenic moisturizers provide necessary hydration without clogging pores, which is important for acne-prone skin to maintain moisture balance while preventing further breakouts."
+            )
+        elif concern == "aging":
+            product_scores["Retinoid Serum"] += 3 * confidence
+            product_reasons["Retinoid Serum"].append(
+                "Retinoid serums are highly effective for addressing signs of aging such as wrinkles and fine lines because they promote collagen production, increase cell turnover, and improve skin texture and firmness over time."
+            )
+            
+            product_scores["Barrier Repair Moisturizer"] += 2 * confidence
+            product_reasons["Barrier Repair Moisturizer"].append(
+                "Barrier repair moisturizers can help to strengthen the skin's natural barrier, which is important for aging skin that may experience dryness, loss of elasticity, and increased sensitivity."
+            )        
+        elif concern == "sensitivity":
+            product_scores["Barrier Repair Moisturizer"] += 3 * confidence
+            product_reasons["Barrier Repair Moisturizer"].append(
+                "Barrier repair moisturizers contain ingredients that help to strengthen and restore the skin's natural barrier, which is crucial for sensitive skin that is prone to irritation and inflammation."
+            )
+            
+            product_scores["Gentle Fragence-Free Cleanser"] += 2 * confidence
+            product_reasons["Gentle Fragence-Free Cleanser"].append(
+                "Gentle fragrance-free cleansers are formulated to cleanse the skin without stripping away natural oils or causing irritation, making them ideal for sensitive skin that can react to harsh ingredients."
+            )
+        elif concern == "sun protection":
+            product_scores["Broad-Spectrum Sunscreen (SPF 30-50)"] += 3 * confidence
+            product_reasons["Broad-Spectrum Sunscreen (SPF 30-50)"].append(
+                "Broad-spectrum sunscreen with SPF 30-50 is crucial for protecting sensitive skin from harmful UV rays, preventing sunburn, and reducing the risk of irritation and long-term damage caused by sun exposure."
+            )
+            
+            product_scores["Antixoidant Serum (Vitamin C, E, ferulic, etc.)"] += 2 * confidence
+            product_reasons["Antixoidant Serum (Vitamin C, E, ferulic, etc.)"].append(
+                "Antioxidant serums containing ingredients like vitamin C, E, and ferulic acid can help to protect sensitive skin from environmental damage, reduce inflammation, and improve overall skin health by neutralizing free radicals."
+            )
+        elif concern == "hydration":
+            product_scores["Rich Cream Moisturizer"] += 3 * confidence
+            product_reasons["Rich Cream Moisturizer"].append(
+                "Rich cream moisturizers are designed to provide intense hydration and nourishment, which is essential for dry skin that lacks moisture and may feel tight or flaky."
+            )
+            
+            product_scores["Hydrating Serum"] += 2 * confidence
+            product_reasons["Hydrating Serum"].append(
+                "Hydrating serums often contain ingredients like hyaluronic acid that can attract and retain moisture in the skin, making them beneficial for dry skin to boost hydration levels."
+            )
+    
+    # ------- Goals -------------------------
+    for goal in user_profile.goals:
+        if goal == "clear_skin":
+            pass
+        elif goal == "anti_aging":
+            pass
+        elif goal == "hydration":
+            pass
+        elif goal == "protection":
+            pass
+        elif goal == "soothe":
+            pass
+        
+    
+    results = []
+    # using results list to rank products including those with highest score and include reasons
+    # what do we want to return?
+    # 1 product for skin type, 1 for concerns, 1 for goals?
+    # if i do that what is the purpose of the confidence + 2 scores
+    # maybe it is based on conflicting products if skin type and concern offer two different types of cleansers 
+    # for example then we can use the confidence and scores to determine which one is more important to recommend?
+    # how would we do this
+    # if statements to determine which product to recommend based on the highest score and confidence for each category
+    # and then we can also include the reasons for the recommendation based on the product_reasons dictionary
+    for product, score in product_scores.items():
+        reasons = product_reasons[product]
+        results.append({
+            "product": product,
+            "score": round(score, 3),
+            "reasons": reasons
+        })
+        
+    return results
+
+
+# ================= PRODUCT RECOMMENDATIONS END =================
+
+
 # Main Conservation Function Loop
 def have_conversation():
     print("Welcome to the Skincare AI Consultant!\n")
@@ -347,15 +494,21 @@ def have_conversation():
             skin_types = extract_all_skin_type_semantics(user_input)
             for item in skin_types:
                 user_profile.add_skin_type(item["label"])
+                user_profile.add_confidence(item["label"], item["score"])
         elif question.startswith("What concerns do you have about your skin"):
             concerns = extract_all_concerns_semantics(user_input)
             for item in concerns:
                 user_profile.add_concern(item["label"])
+                user_profile.add_confidence(item["label"], item["score"])
         elif question.startswith("What are your skincare goals"):
             goals = extract_all_goals_semantics(user_input)
             for item in goals:
                 user_profile.add_goal(item["label"])
+                user_profile.add_confidence(item["label"], item["score"])
 
+    recommended_products = recommend_products(user_profile)
+    
+    print(recommended_products)
             
     
 if __name__ == "__main__":
