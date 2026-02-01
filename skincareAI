@@ -21,7 +21,6 @@ class UserProfile:
     def add_skin_type(self, skin_type):
         if skin_type not in self.skin_types:
             self.skin_types.append(skin_type)
-        
     
     def add_concern(self, concern):
         if concern not in self.concerns:
@@ -33,10 +32,9 @@ class UserProfile:
     
     def add_confidence(self, label, score):
         if label not in self.confidence:
-            self.confidence[label] = score
+            self.confidence[label] = min(score, 0.85) # cap confidence to 0.85 to avoid overconfidence
         else:
-            self.confidence[label] = max(self.confidence[label], score)
-        
+            self.confidence[label] = max(self.confidence[label], min(score, 0.85))  
 
 # Function to determine what to ask next based on missing info one at a time in user profile
 def what_to_ask_next(question_number):
@@ -144,7 +142,7 @@ def extract_all_skin_type_semantics(text, min_similarity=0.35):
         similarity = util.cos_sim(user_emb, ref_emb).item()
         scores.append((label, similarity))
     
-    # sort scores by similarity
+    # sort scores by similarity (1.0 is most similar, )
     scores.sort(key=lambda x: x[1], reverse=True)
     
     best_score = scores[0][1]
@@ -191,36 +189,42 @@ def extract_all_concerns_semantics(text, min_similarity=0.35, margin=0.08):
         )
     }
     
-    
+    raw_scores = {}
     scores = []
-        
+    
+    # calculate similarity score between reference text and user text
     for label, references_text in references.items():
         ref_emb = model.encode(references_text)
-        similarity = util.cos_sim(user_emb, ref_emb).item()
+        raw_scores[label] = util.cos_sim(user_emb, ref_emb).item()
         
-        scores.append((label, similarity))
-            
-    scores.sort(key=lambda x: x[1], reverse=True)
-    
     # holds best score
-    best_score = scores[0][1]
-    detected = []
+    best_score = max(raw_scores.values())
     
-    for label, score in scores:
+    detected = {}
+    for label, score in raw_scores.items():
         # keep labels that are:
-        # 1. reasonably similar
-        # 2. close to the best score
-        # purpose to find other labels that are also good matches (multi answers)
+        # 1. reasonably similar (min similarity)
+        # 2. close to the best score (margin)
+        # purpose: Find other labels that are also good matches (multi answers)
+        # raw_score: similarity score
+        # relative_score: score compared to best score (0.0 to 1.0)
         if score >= min_similarity and (best_score - score) <= margin:
-            detected.append((label, score))
+            detected[label] = {
+                "raw_score": score,
+                "relative_score": score / best_score if best_score > 0 else 0
+            }
     
+    # what is weight I am not sure
     if not detected:
-        return []
-    else:
-        return [
-            {"label": label, "score": round(score, 3)}
-            for label, score in detected
-        ]
+        return {"detected": {}, "weights": {}}
+    
+    # Create normalized weight (only for distribution within category)
+    # Come back later as unsure what I am doing actually
+    
+    return [
+        {"label": label, "score": round(score, 3)}
+        for label, score in detected
+    ]
         
        
     
@@ -286,7 +290,119 @@ def extract_all_goals_semantics(text, min_similarity=0.35, margin=0.08):
 
 # ==================== ML Semantics END ====================
 
+# ======================== PLANING =========================
+# routine building before product recommendations
+# cleanser
+# moisturizer
+# sunscreen
+# treatment/serum
+Product_Rules = {
+    "cleanser": {
+        "essential": True,
+        "max": 1,
+        "order": 1
+    },
+    "toner": {
+        "essential": False,
+        "max": 1,
+        "order": 2
+    },
+    "treatment_serum": {
+        "essential": False,
+        "max": 2,
+        "order": 3,
+        "require_concern": True
+    },
+    "moisturizer": {
+        "essential": True,
+        "max": 1,
+        "order": 4
+    },
+    "facial_oil": {
+        "essential": False,
+        "max": 1,
+        "order": 5
+    },
+    "sunscreen": {
+        "essential": True,
+        "max": 1,
+        "order": 6,
+        "require_am": True        
+    },
+}
+
+
+
+# now i made the product_rules but am not sure how to use it yet
+# product_rules should be used for building the routine with the recommended products
+# product_rule is not done yet as i did not take into account the user profile when building the routine
+# use rule base system to build routine based on user profile 
+
+# role activation logic
+def allow_categories(context):
+    allowed = []
+    
+
+# =================== PLANING END ==========================
+
+
 # ================ PRODUCT RECOMMEDATIONS ==================
+# Data structure to hold product info
+Product_Info = {
+    "Salicylic Acid Cleanser": {
+        "type": "Cleanser",
+        "description": "Salicylic acid helps to exfoliate and clear out clogged pores, which is beneficial for oily skin prone to acne and breakouts."
+    },
+    "Gel Moisturizer": {
+        "type": "Moisturizer",
+        "description": "Gel moisturizers provide hydration without adding excess oil, making them suitable for oily skin to maintain moisture balance without clogging pores."
+    },
+    "Rich Cream Moisturizer": {
+        "type": "Moisturizer",
+        "description": "Rich cream moisturizers are designed to provide intense hydration and nourishment, which is essential for dry skin that lacks moisture and may feel tight or flaky."
+    },
+    "Hydrating Serum": {
+        "type": "Serum",
+        "description": "Hydrating serums often contain ingredients like hyaluronic acid that can attract and retain moisture in the skin, making them beneficial for dry skin to boost hydration levels."
+    },
+    "Barrier Repair Moisturizer": {
+        "type": "Moisturizer",
+        "description": "Barrier repair moisturizers contain ingredients like ceramides, panthenol, and centella would help strengthen and restore the skin's natural barrier, which is crucial for sensitive skin that is prone to irritation and inflammation."
+    },
+    "Gentle Fragence-Free Cleanser": {
+        "type": "Cleanser",
+        "description": "Gentle fragrance-free cleansers are formulated to cleanse the skin without stripping away natural oils or causing irritation, making them ideal for sensitive skin that can react to harsh ingredients."
+    },
+    "Lightweight Barrier-Supporting Moisturizer": {
+        "type": "Moisturizer",
+        "description": "Lightweight barrier-supporting moisturizers provide balanced hydration and help maintain the skin's natural barrier without being too heavy or greasy, making them suitable for combination skin that has both oily and dry areas."
+    },
+    "Broad-Spectrum Sunscreen": {
+        "type": "Sunscreen",
+        "description": "Broad-spectrum sunscreen SPF 30-50 is essential for protecting the skin from harmful UV rays and preventing sun damage, which is important for maintaining healthy skin regardless of skin type."
+    },
+    "Lightweight Moisturizer": {
+        "type": "Moisturizer",
+        "description": "Lightweight moisturizers provide hydration without being too heavy, making them suitable for normal skin to maintain a balanced and healthy complexion."
+    },
+    "Leave-On Salicylic Acid (BHA)": {
+        "type": "Treatment",
+        "description": "Leave-on salicylic acid (BHA) products are effective for treating acne because they penetrate deep into the pores to exfoliate and clear out excess oil, dead skin cells, and impurities that can lead to breakouts."
+    },
+    "Lightweight Non-Comedogenic Moisturizer": {
+        "type": "Moisturizer",
+        "description": "Lightweight non-comedogenic moisturizers provide necessary hydration without clogging pores, which is important for acne-prone skin to maintain moisture balance while preventing further breakouts."
+    },
+    "Retinoid Serum": {
+        "type": "Serum",
+        "description": "Retinoid serums are highly effective for addressing signs of aging such as wrinkles and fine lines because they promote collagen production, increase cell turnover, and improve skin texture and firmness over time."
+    },
+    "Antioxidant Serum": {
+        "type": "Serum",
+        "description": "Antioxidant serums containing ingredients like vitamin C, E, and ferulic acid can help to protect skin from environmental damage, reduce inflammation, and improve overall skin health by neutralizing free radicals."
+    }
+}
+
 def recommend_products(user_profile):
     # Main recommendation functions
     # Returns ranked list of products, score, reasons
@@ -302,152 +418,186 @@ def recommend_products(user_profile):
     # +1 means somewhat helpful or a nice to have for the problem (optional)
     # ------- Skin Type-------------------------
     for skin_type in user_profile.skin_types:
-        # confidence is the score rating from the extract functions
-        confidence = user_profile.confidence.get(skin_type, 1.0) 
+        # confidence is the score rating from the semantic extraction functions before (0.0 default value incase of future errors)
+        confidence = user_profile.confidence.get(skin_type, 0.0) 
 
         if skin_type == "oily":
             product_scores["Salicylic Acid Cleanser"] += 3 * confidence
-            product_reasons["Salicylic Acid Cleanser"].append(
-                "Salicylic acid helps to exfoliate and clear out clogged pores, which is beneficial for oily skin prone to acne and breakouts."
-            )
+            if product_reasons["Salicylic Acid Cleanser"] == []:
+                product_reasons["Salicylic Acid Cleanser"].append(Product_Info["Salicylic Acid Cleanser"]["description"])
             
             product_scores["Gel Moisturizer"] += 2 * confidence
-            product_reasons["Gel Moisturizer"].append(
-                "Gel moisturizers provide hydration without adding excess oil, making them suitable for oily skin to maintain moisture balance without clogging pores."
-            )
+            if product_reasons["Gel Moisturizer"] == []:
+                product_reasons["Gel Moisturizer"].append(Product_Info["Gel Moisturizer"]["description"])
             
         elif skin_type == "dry":
             product_scores["Rich Cream Moisturizer"] += 3 * confidence
-            product_reasons["Rich Cream Moisturizer"].append(
-                "Rich cream moisturizers are designed to provide intense hydration and nourishment, which is essential for dry skin that lacks moisture and may feel tight or flaky."
-            )
+            if product_reasons["Rich Cream Moisturizer"] == []:
+                product_reasons["Rich Cream Moisturizer"].append(Product_Info["Rich Cream Moisturizer"]["description"])
             
             product_scores["Hydrating Serum"] += 2 * confidence
-            product_reasons["Hydrating Serum"].append(
-                "Hydrating serums often contain ingredients like hyaluronic acid that can attract and retain moisture in the skin, making them beneficial for dry skin to boost hydration levels."
-            )
+            if product_reasons["Hydrating Serum"] == []:
+                product_reasons["Hydrating Serum"].append(Product_Info["Hydrating Serum"]["description"])
+
         elif skin_type == "sensitive":
             product_scores["Barrier Repair Moisturizer"] += 3 * confidence
-            product_reasons["Barrier Repair Moisturizer"].append(
-                "Barrier repair moisturizers contain ingredients that help to strengthen and restore the skin's natural barrier, which is crucial for sensitive skin that is prone to irritation and inflammation."
-            )
+            if product_reasons["Barrier Repair Moisturizer"] == []:
+                product_reasons["Barrier Repair Moisturizer"].append(Product_Info["Barrier Repair Moisturizer"]["description"])
             
             product_scores["Gentle Fragence-Free Cleanser"] += 2 * confidence
-            product_reasons["Gentle Fragence-Free Cleanser"].append(
-                "Gentle fragrance-free cleansers are formulated to cleanse the skin without stripping away natural oils or causing irritation, making them ideal for sensitive skin that can react to harsh ingredients."
-            )
+            if product_reasons["Gentle Fragence-Free Cleanser"] == []:
+                product_reasons["Gentle Fragence-Free Cleanser"].append(Product_Info["Gentle Fragence-Free Cleanser"]["description"])
         elif skin_type == "combination":
             product_scores["Lightweight Barrier-Supporting Moisturizer"] += 3 * confidence
-            product_reasons["Lightweight Barrier-Supporting Moisturizer"].append(
-                "Lightweight barrier-supporting moisturizers provide balanced hydration and help maintain the skin's natural barrier without being too heavy or greasy, making them suitable for combination skin that has both oily and dry areas."
-            )
+            if product_reasons["Lightweight Barrier-Supporting Moisturizer"] == []:
+                product_reasons["Lightweight Barrier-Supporting Moisturizer"].append(Product_Info["Lightweight Barrier-Supporting Moisturizer"]["description"])
             
             product_scores["Salicylic Acid Cleanser"] += 2 * confidence
-            product_reasons["Salicylic Acid Cleanser"].append(
-                "Salicylic acid helps to exfoliate and clear out clogged pores, which is beneficial for oily skin prone to acne and breakouts."
-            )
+            if product_reasons["Salicylic Acid Cleanser"] == []:
+                product_reasons["Salicylic Acid Cleanser"].append(Product_Info["Salicylic Acid Cleanser"]["description"])   
         elif skin_type == "normal":
             product_scores["Broad-Spectrum Sunscreen"] += 3 * confidence
-            product_reasons["Broad-Spectrum Sunscreen"].append(
-                "Broad-spectrum sunscreen is essential for protecting the skin from harmful UV rays and preventing sun damage, which is important for maintaining healthy skin regardless of skin type."
-            )
+            if product_reasons["Broad-Spectrum Sunscreen"] == []:
+                product_reasons["Broad-Spectrum Sunscreen"].append(Product_Info["Broad-Spectrum Sunscreen"]["description"])
             
             product_scores["Lightweight Moisturizer"] += 2 * confidence
-            product_reasons["Lightweight Moisturizer"].append(
-                "Lightweight moisturizers provide hydration without being too heavy, making them suitable for normal skin to maintain a balanced and healthy complexion."
-            )
+            if product_reasons["Lightweight Moisturizer"] == []:
+                product_reasons["Lightweight Moisturizer"].append(Product_Info["Lightweight Moisturizer"]["description"])
             
     
     # ------ Concerns -------------------------
     for concern in user_profile.concerns:
+        confidence = user_profile.confidence.get(concern, 0.0)
         if concern == "acne":
             product_scores["Leave-On Salicylic Acid (BHA)"] += 3 * confidence
-            product_reasons["Leave-On Salicylic Acid (BHA)"].append(
-                "Leave-on salicylic acid (BHA) products are effective for treating acne because they penetrate deep into the pores to exfoliate and clear out excess oil, dead skin cells, and impurities that can lead to breakouts."
-            )
+            if product_reasons["Leave-On Salicylic Acid (BHA)"] == []:
+                product_reasons["Leave-On Salicylic Acid (BHA)"].append(Product_Info["Leave-On Salicylic Acid (BHA)"]["description"])
             
             product_scores["Lightweight Non-Comedogenic Moisturizer"] += 2 * confidence
-            product_reasons["Lightweight Non-Comedogenic Moisturizer"].append(
-                "Lightweight non-comedogenic moisturizers provide necessary hydration without clogging pores, which is important for acne-prone skin to maintain moisture balance while preventing further breakouts."
-            )
+            if product_reasons["Lightweight Non-Comedogenic Moisturizer"] == []:
+                product_reasons["Lightweight Non-Comedogenic Moisturizer"].append(Product_Info["Lightweight Non-Comedogenic Moisturizer"]["description"])
         elif concern == "aging":
             product_scores["Retinoid Serum"] += 3 * confidence
-            product_reasons["Retinoid Serum"].append(
-                "Retinoid serums are highly effective for addressing signs of aging such as wrinkles and fine lines because they promote collagen production, increase cell turnover, and improve skin texture and firmness over time."
-            )
+            if product_reasons["Retinoid Serum"] == []:
+                product_reasons["Retinoid Serum"].append(Product_Info["Retinoid Serum"]["description"])
             
             product_scores["Barrier Repair Moisturizer"] += 2 * confidence
-            product_reasons["Barrier Repair Moisturizer"].append(
-                "Barrier repair moisturizers can help to strengthen the skin's natural barrier, which is important for aging skin that may experience dryness, loss of elasticity, and increased sensitivity."
-            )        
+            if product_reasons["Barrier Repair Moisturizer"] == []:
+                product_reasons["Barrier Repair Moisturizer"].append(Product_Info["Barrier Repair Moisturizer"]["description"])        
         elif concern == "sensitivity":
             product_scores["Barrier Repair Moisturizer"] += 3 * confidence
-            product_reasons["Barrier Repair Moisturizer"].append(
-                "Barrier repair moisturizers contain ingredients that help to strengthen and restore the skin's natural barrier, which is crucial for sensitive skin that is prone to irritation and inflammation."
-            )
+            if product_reasons["Barrier Repair Moisturizer"] == []:
+                product_reasons["Barrier Repair Moisturizer"].append(Product_Info["Barrier Repair Moisturizer"]["description"])
             
             product_scores["Gentle Fragence-Free Cleanser"] += 2 * confidence
-            product_reasons["Gentle Fragence-Free Cleanser"].append(
-                "Gentle fragrance-free cleansers are formulated to cleanse the skin without stripping away natural oils or causing irritation, making them ideal for sensitive skin that can react to harsh ingredients."
-            )
+            if product_reasons["Gentle Fragence-Free Cleanser"] == []:
+                product_reasons["Gentle Fragence-Free Cleanser"].append(Product_Info["Gentle Fragence-Free Cleanser"]["description"])
         elif concern == "sun protection":
-            product_scores["Broad-Spectrum Sunscreen (SPF 30-50)"] += 3 * confidence
-            product_reasons["Broad-Spectrum Sunscreen (SPF 30-50)"].append(
-                "Broad-spectrum sunscreen with SPF 30-50 is crucial for protecting sensitive skin from harmful UV rays, preventing sunburn, and reducing the risk of irritation and long-term damage caused by sun exposure."
-            )
-            
-            product_scores["Antixoidant Serum (Vitamin C, E, ferulic, etc.)"] += 2 * confidence
-            product_reasons["Antixoidant Serum (Vitamin C, E, ferulic, etc.)"].append(
-                "Antioxidant serums containing ingredients like vitamin C, E, and ferulic acid can help to protect sensitive skin from environmental damage, reduce inflammation, and improve overall skin health by neutralizing free radicals."
-            )
+            product_scores["Broad-Spectrum Sunscreen"] += 3 * confidence
+            if product_reasons["Broad-Spectrum Sunscreen"] == []:
+                product_reasons["Broad-Spectrum Sunscreen"].append(Product_Info["Broad-Spectrum Sunscreen"]["description"])
+
+            product_scores["Antioxidant Serum"] += 2 * confidence
+            if product_reasons["Antioxidant Serum"] == []:
+                product_reasons["Antioxidant Serum"].append(Product_Info["Antioxidant Serum"]["description"])
+                
         elif concern == "hydration":
             product_scores["Rich Cream Moisturizer"] += 3 * confidence
-            product_reasons["Rich Cream Moisturizer"].append(
-                "Rich cream moisturizers are designed to provide intense hydration and nourishment, which is essential for dry skin that lacks moisture and may feel tight or flaky."
-            )
-            
+            if product_reasons["Rich Cream Moisturizer"] == []:
+                product_reasons["Rich Cream Moisturizer"].append(Product_Info["Rich Cream Moisturizer"]["description"])
+
             product_scores["Hydrating Serum"] += 2 * confidence
-            product_reasons["Hydrating Serum"].append(
-                "Hydrating serums often contain ingredients like hyaluronic acid that can attract and retain moisture in the skin, making them beneficial for dry skin to boost hydration levels."
-            )
-    
+            if product_reasons["Hydrating Serum"] == []:
+                product_reasons["Hydrating Serum"].append(Product_Info["Hydrating Serum"]["description"])
+
     # ------- Goals -------------------------
     for goal in user_profile.goals:
+        confidence = user_profile.confidence.get(goal, 0.0)
         if goal == "clear_skin":
-            pass
+            product_scores["Leave-On Salicylic Acid (BHA)"] += 3 * confidence
+            if product_reasons["Leave-On Salicylic Acid (BHA)"] == []:
+                product_reasons["Leave-On Salicylic Acid (BHA)"].append(Product_Info["Leave-On Salicylic Acid (BHA)"]["description"])
+            
+            product_scores["Lightweight Non-Comedogenic Moisturizer"] += 2 * confidence
+            if product_reasons["Lightweight Non-Comedogenic Moisturizer"] == []:
+                product_reasons["Lightweight Non-Comedogenic Moisturizer"].append(Product_Info["Lightweight Non-Comedogenic Moisturizer"]["description"])
+                
         elif goal == "anti_aging":
-            pass
+            product_scores["Retinoid Serum"] += 3 * confidence
+            if product_reasons["Retinoid Serum"] == []:
+                product_reasons["Retinoid Serum"].append(Product_Info["Retinoid Serum"]["description"])
+            
+            product_scores["Barrier Repair Moisturizer"] += 2 * confidence
+            if product_reasons["Barrier Repair Moisturizer"] == []:
+                product_reasons["Barrier Repair Moisturizer"].append(Product_Info["Barrier Repair Moisturizer"]["description"])
+                
         elif goal == "hydration":
-            pass
+            product_scores["Rich Cream Moisturizer"] += 3 * confidence
+            if product_reasons["Rich Cream Moisturizer"] == []:
+                product_reasons["Rich Cream Moisturizer"].append(Product_Info["Rich Cream Moisturizer"]["description"])
+            
+            product_scores["Hydrating Serum"] += 2 * confidence
+            if product_reasons["Hydrating Serum"] == []:
+                product_reasons["Hydrating Serum"].append(Product_Info["Hydrating Serum"]["description"])
         elif goal == "protection":
-            pass
+            product_scores["Broad-Spectrum Sunscreen"] += 3 * confidence
+            if product_reasons["Broad-Spectrum Sunscreen"] == []:
+                product_reasons["Broad-Spectrum Sunscreen"].append(Product_Info["Broad-Spectrum Sunscreen"]["description"])
+
+            product_scores["Antioxidant Serum"] += 2 * confidence
+            if product_reasons["Antioxidant Serum"] == []:
+                product_reasons["Antioxidant Serum"].append(Product_Info["Antioxidant Serum"]["description"])
+                
         elif goal == "soothe":
-            pass
-        
+            product_scores["Barrier Repair Moisturizer"] += 3 * confidence
+            if product_reasons["Barrier Repair Moisturizer"] == []:
+                product_reasons["Barrier Repair Moisturizer"].append(Product_Info["Barrier Repair Moisturizer"]["description"])
+
+            product_scores["Gentle Fragence-Free Cleanser"] += 2 * confidence
+            if product_reasons["Gentle Fragence-Free Cleanser"] == []:
+                product_reasons["Gentle Fragence-Free Cleanser"].append(Product_Info["Gentle Fragence-Free Cleanser"]["description"])
     
     results = []
-    # using results list to rank products including those with highest score and include reasons
-    # what do we want to return?
-    # 1 product for skin type, 1 for concerns, 1 for goals?
-    # if i do that what is the purpose of the confidence + 2 scores
-    # maybe it is based on conflicting products if skin type and concern offer two different types of cleansers 
-    # for example then we can use the confidence and scores to determine which one is more important to recommend?
-    # how would we do this
-    # if statements to determine which product to recommend based on the highest score and confidence for each category
-    # and then we can also include the reasons for the recommendation based on the product_reasons dictionary
-    for product, score in product_scores.items():
-        reasons = product_reasons[product]
+    # sort products by score highest to lowest
+    sorted_products = sorted(product_scores.items(), key=lambda x: x[1], reverse=True)
+    
+    # return the top 3 products with their scores and reasons
+    # make sure to only return one moisturizer and cleanser product, duplicate product types are fine for the rest
+    # to check for duplicate product types we can create a set to track the types of products we have already included in the results and skip any products that are of the same type as one already included
+    
+    # rather than using set, I would use Product_Info to check the type of product and only include one moisturizer and cleanser in the results
+    # we can do this by checking the type of each product as we iterate through sorted_products and only add if the type is not already included
+    for product, score in sorted_products:
+        if len(results) >= 3:
+            break
+        
+        product_type = Product_Info[product]["type"]
+        # p["product"] return the key use to access Product_Info
+        
+        if product_type == "Moisturizer":
+            if any(Product_Info[p["product"]]["type"] == "Moisturizer" for p in results):
+                continue
+        elif product_type == "Cleanser":
+            if any(Product_Info[p["product"]]["type"] == "Cleanser" for p in results):
+                continue
         results.append({
             "product": product,
             "score": round(score, 3),
-            "reasons": reasons
+            "reasons": product_reasons[product]
         })
-        
+
     return results
 
 
 # ================= PRODUCT RECOMMENDATIONS END =================
-
+# clean up text
+def clean_text(text):
+    # clean user text
+    text = text.lower() 
+    text = re.sub(r'[^a-z0-9\s]', '', text)  # Remove punctuation
+    text = re.sub(r'\s+', ' ', text).strip()  # Remove extra spaces
+    
+    return text
 
 # Main Conservation Function Loop
 def have_conversation():
@@ -466,25 +616,7 @@ def have_conversation():
         
         # Print question
         print(f"Bot: {question}")
-        
-        
-        # Check if any information is missing and update profile
-        # Not a very clean way to do this as its a string check - fix later
-        if question.startswith("Thanks for sharing!"): 
-            check_missing_info_and_ask(user_profile)
-            
-            print("Great! I have all the information I need. Is there anything else you'd like to share?")
-
-            user_done = input("You: ")
-            print()
-            if user_done.lower() in ['no', 'nothing', 'that\'s all', 'quit', 'exit']:
-                print("Bot: Thank you for sharing your skincare information! Here is what I gathered:\n")
-                print(f"  . Detected Skin Type: {user_profile.skin_types if user_profile.skin_types else 'Not detected'}")
-                print(f"  . Detected Concerns: {user_profile.concerns if user_profile.concerns else 'None detected'}")
-                print(f"  . Detected Goals: {user_profile.goals if user_profile.goals else 'No goals specified'}")
-                print("\nBot: I'll use this information to provide you with personalized skincare recommendations!")
-                break
-        
+         
         # Get user input
         user_input = input("You: ")
         print() # new line for readability
@@ -505,11 +637,44 @@ def have_conversation():
             for item in goals:
                 user_profile.add_goal(item["label"])
                 user_profile.add_confidence(item["label"], item["score"])
+        
+        
+        # Check if any information is missing and update profile
+        # Not a very clean way to do this as its a string check - fix later
+        elif question.startswith("Thanks for sharing!"): 
+            check_missing_info_and_ask(user_profile)
+        
+            print("Bot: Here is what I gathered:\n")
+            print(f"  . Detected Skin Type: {user_profile.skin_types if user_profile.skin_types else 'Not detected'}")
+            print(f"  . Detected Concerns: {user_profile.concerns if user_profile.concerns else 'None detected'}")
+            print(f"  . Detected Goals: {user_profile.goals if user_profile.goals else 'No goals specified'}")
+            
+            print(f"\nWould you like to:")
+            print(f"1. Satifisited with skincare information and move on to the routine")
+            print(f"2. Adjust detected skin type")
+            print(f"3. Adjust detected skin concerns")
+            print(f"4. Adjust detected skin goals")
+            user_done = input("Enter 1-4\nYou: ")
+            
+            if user_done in ["1", "2", "3", "4", "one", "two", "three", "four"]:
+                break
+            else:
+                print("Please choose and answer with one of the number options listed.")
 
     recommended_products = recommend_products(user_profile)
     
-    print(recommended_products)
-            
+    for product in recommended_products:
+        print(f"  . Product: {product['product']}")
+        print(f"  . Reasons: {product['reasons']}\n")
+        
+
+
     
 if __name__ == "__main__":
     have_conversation()
+    
+    
+# sematic verbosity 
+# EX: I have oily skin
+# User 1: My skin get extremely oily throughout the day around my nose and forehead and I constantly feel greasy
+# User 2: Both user inputs means the same but due to second input having more descriptive languaage it will have higher semantics scoring.
