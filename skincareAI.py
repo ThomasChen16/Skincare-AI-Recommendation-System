@@ -1,5 +1,6 @@
 import re # regular expressions for text cleaning
 from collections import Counter
+from shlex import join
 
 from sentence_transformers import SentenceTransformer, util
 model = SentenceTransformer('all-MiniLM-L6-v2')
@@ -229,7 +230,8 @@ def extract_all_concerns_semantics(text, min_similarity=0.35, margin=0.08):
     
     # what is weight I am not sure
     if not detected:
-        return {"detected": {}, "weights": {}}
+        #return {"detected": {}, "weights": {}}
+        return []
     
     # Create normalized weight (only for distribution within category)
     # Come back later as unsure what I am doing actually
@@ -390,6 +392,7 @@ def build_routine(context):
         
         # determine number of products based of if essential
         if rules["essential"]:
+            # count is how many products of that type we want to recommend
             count = 1
         else:
             if product_type == "treatment":
@@ -517,13 +520,71 @@ Product_Info = {
     }
 }
 
-def recommend_for_category(category, context, count):
-    # Fill one category at a time based on the routine blueprint and product rules
-    pass
-            
+def recommend_for_product_type(category, context, count = 1):
+    # Fill one product type at a time based on the routine blueprint and product rules
+    candiates = []
+    for product, info in Product_Info.items():
+        if info["type"] == category:
+            candiates.append((product, info))
+    
+    # calculate coverage score for each candidate product based on how well it addresses the user's skin type, concerns, and goals
+    scored_candidates = []
+    for product, info in candiates:
+        score = calculate_coverage(info, context)
+        scored_candidates.append((product, info, score))
+        
+    # sort candidates by score
+    scored_candidates.sort(key=lambda x: x[2], reversed=True)
+    results = []
+    # [:count] to get top products based on count specified in Build Routine
+    for product, info, score in scored_candidates[:count]:
+        results.append({
+            "product": product,
+            "type": info["type"],
+            "score": score,
+            "reason": generate_reasoning(info, context)
+        })
+        
+    return candiates[:count]
+
+def calculate_coverage(product, context):
+    # Calculate how well a product addresses the user's skin type, concerns, and goals based on Product_Info and user profile
+    score = 0
+    # skin type match is most important 
+    if context["skin_type"] in product["skin_types_addressed"]:
+        score += 3
+    else:
+        score -= 2
+    
+    # find how many concerns the product addresses that the user has
+    product_concerns = set(product["concerns_addressed"])
+    user_concerns = set(context["concerns"])
+    # intersection
+    concern_matches = product_concerns & user_concerns
+    score += len(concern_matches) * 2
+    
+    # find how many goals the product addressed that the user has
+    product_goals = set(product["goals_addressed"])
+    user_goals = set(context["goals"])
+    
+    goal_matches = product_goals & user_goals
+    # * 1 because goal match is less important than concern and skin type match
+    score += len(goal_matches) * 1
     
     
+    return score
+
+def generate_reasoning(info, context):
+    # Generate reasoning for why a product is recommended based on how it addresses the user's skin type, concerns, and goals
+    reasoning = []
+    if context["skin_type"] in info["skin_types_addressed"]:
+        reasoning.append(f"Addresses your skin type ({context['skin_type']}).")
+    else:
+        reasoning.append(f"Not ideal for your skin type ({context['skin_type']}), but may still provide some benefits.")
     
+    concern_matches = set(info["concerns_addressed"]) & set(context["concerns"])
+    if concern_matches:
+        reasoning.append(f"Targets your skin concerns: {', '.join(concern_matches)}.")
 
 # ================= PRODUCT RECOMMENDATIONS END =================
 # clean up text
@@ -618,8 +679,8 @@ def have_conversation():
         
         routine_blueprint = build_routine(context)
         recommend_routine = []
-        for category in routine_blueprint:
-            products = recommend_for_category(category["category"], context, category["count"])
+        for product_type in routine_blueprint:
+            products = recommend_for_product_type(product_type["category"], context, product_type["count"])
             # extend recommend_routine with products while avoiding duplicates
             recommend_routine.extend(products)
 
