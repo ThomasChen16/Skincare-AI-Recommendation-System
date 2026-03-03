@@ -12,9 +12,7 @@ class UserProfile:
     def __init__(self):
         self.skin_type = None
         self.concerns = []
-        self.goals = []
-        
-        self.confidence = {}
+        self.goals = []   
         
     def add_skin_type(self, skin_type):
         self.skin_type = skin_type
@@ -27,11 +25,6 @@ class UserProfile:
         if goal not in self.goals:
             self.goals.append(goal)
     
-    def add_confidence(self, label, score):
-        if label not in self.confidence:
-            self.confidence[label] = min(score, 0.85) # cap confidence to 0.85 to avoid overconfidence
-        else:
-            self.confidence[label] = max(self.confidence[label], min(score, 0.85))  
 
 # Function to determine what to ask next based on missing info one at a time in user profile
 def what_to_ask_next(question_number):
@@ -76,18 +69,15 @@ def check_missing_info_and_ask(user_profile):
         
         if missing == "skin_type":
             skin_type = extract_all_skin_type_semantics(user_input)
-            user_profile.add_skin_type(skin_type["label"])
-            user_profile.add_confidence(skin_type["label"], skin_type["score"])
+            user_profile.add_skin_type(skin_type)
         elif missing == "concerns":
             concerns = extract_all_concerns_semantics(user_input)
             for item in concerns:
-                user_profile.add_concern(item["label"])
-                user_profile.add_confidence(item["label"], item["score"])
+                user_profile.add_concern(item)
         elif missing == "goals":
             goals = extract_all_goals_semantics(user_input)
             for item in goals:
-                user_profile.add_goal(item["label"])
-                user_profile.add_confidence(item["label"], item["score"])
+                user_profile.add_goal(item)
 
         attempt += 1
         if attempt >= 3: # if after 3 attempts we still have missing info we break and move on
@@ -158,9 +148,7 @@ def extract_all_skin_type_semantics(text, min_similarity=0.35):
     if best_score < min_similarity:
         return []
     else: 
-        return [
-            {"label": scores[0][0], "score": round(best_score, 3)}
-        ]
+        return scores[0][0]
 
 def extract_all_concerns_semantics(text, min_similarity=0.35, margin=0.08):
     user_emb = model.encode(text)
@@ -214,7 +202,7 @@ def extract_all_concerns_semantics(text, min_similarity=0.35, margin=0.08):
     # holds best score
     best_score = max(raw_scores.values())
     
-    detected = {}
+    detected = []
     for label, score in raw_scores.items():
         # keep labels that are:
         # 1. reasonably similar (min similarity)
@@ -223,23 +211,9 @@ def extract_all_concerns_semantics(text, min_similarity=0.35, margin=0.08):
         # raw_score: similarity score
         # relative_score: score compared to best score (0.0 to 1.0)
         if score >= min_similarity and (best_score - score) <= margin:
-            detected[label] = {
-                "raw_score": score,
-                "relative_score": score / best_score if best_score > 0 else 0
-            }
+            detected.append(label)
     
-    # what is weight I am not sure
-    if not detected:
-        #return {"detected": {}, "weights": {}}
-        return []
-    
-    # Create normalized weight (only for distribution within category)
-    # Come back later as unsure what I am doing actually
-    
-    return [
-        {"label": label, "score": round(score, 3)}
-        for label, score in detected
-    ]
+    return detected
         
        
     
@@ -298,15 +272,9 @@ def extract_all_goals_semantics(text, min_similarity=0.35, margin=0.08):
     
     for label, score in scores:
         if score >= min_similarity and (best_score - score) <= margin:
-            detected.append((label, score))
+            detected.append(label)
 
-    if not detected:
-        return []
-    else:        
-        return [
-            {"label": label, "score": round(score, 3)}
-            for label, score in detected
-        ]
+    return detected 
 
 
 # ==================== ML Semantics END ====================
@@ -520,18 +488,19 @@ Product_Info = {
     }
 }
 
+
 def recommend_for_product_type(category, context, count = 1):
     # Fill one product type at a time based on the routine blueprint and product rules
     candiates = []
-    for product, info in Product_Info.items():
-        if info["type"] == category:
-            candiates.append((product, info))
+    for product_name, product_details in Product_Info.items():
+        if product_details["type"] == category:
+            candiates.append((product_name, product_details))
     
     # calculate coverage score for each candidate product based on how well it addresses the user's skin type, concerns, and goals
     scored_candidates = []
-    for product, info in candiates:
-        score = calculate_coverage(info, context)
-        scored_candidates.append((product, info, score))
+    for category_product_name, category_product_details in candiates:
+        score = calculate_coverage(category_product_details, context)
+        scored_candidates.append((category_product_name, category_product_details, score))
         
     # sort candidates by score
     scored_candidates.sort(key=lambda x: x[2], reversed=True)
@@ -545,7 +514,7 @@ def recommend_for_product_type(category, context, count = 1):
             "reason": generate_reasoning(info, context)
         })
         
-    return candiates[:count]
+    return scored_candidates[:count]
 
 def calculate_coverage(product, context):
     # Calculate how well a product addresses the user's skin type, concerns, and goals based on Product_Info and user profile
@@ -585,6 +554,18 @@ def generate_reasoning(info, context):
     concern_matches = set(info["concerns_addressed"]) & set(context["concerns"])
     if concern_matches:
         reasoning.append(f"Targets your skin concerns: {', '.join(concern_matches)}.")
+        reasoning.append(f"Specifically, {info['description']}")
+    else:
+        reasoning.append("Does not directly target your specific concerns, but may still offer general skincare benefits.")
+    
+    goal_matches = set(info["goals_addressed"]) & set(context["goals"])
+    if goal_matches:
+        reasoning.append(f"Helps you work towards your skincare goals: {', '.join(goal_matches)}.")
+    else:
+        reasoning.append("May not directly align with your specific goals, but could still contribute to overall skin health.")
+    
+    return " ".join(reasoning)
+    
 
 # ================= PRODUCT RECOMMENDATIONS END =================
 # clean up text
@@ -622,18 +603,15 @@ def have_conversation():
         if question.startswith("Tell me about your skin type"):
             skin_types = extract_all_skin_type_semantics(user_input)
             for item in skin_types:
-                user_profile.add_skin_type(item["label"])
-                user_profile.add_confidence(item["label"], item["score"])
+                user_profile.add_skin_type(item)
         elif question.startswith("What concerns do you have about your skin"):
             concerns = extract_all_concerns_semantics(user_input)
             for item in concerns:
-                user_profile.add_concern(item["label"])
-                user_profile.add_confidence(item["label"], item["score"])
+                user_profile.add_concern(item)
         elif question.startswith("What are your skincare goals"):
             goals = extract_all_goals_semantics(user_input)
             for item in goals:
-                user_profile.add_goal(item["label"])
-                user_profile.add_confidence(item["label"], item["score"])
+                user_profile.add_goal(item)
         
         
         # Check if any information is missing and update profile
@@ -678,10 +656,11 @@ def have_conversation():
         }
         
         routine_blueprint = build_routine(context)
+        print(f"Routine Blueprint: {routine_blueprint}\n")
         recommend_routine = []
         for product_type in routine_blueprint:
             products = recommend_for_product_type(product_type["category"], context, product_type["count"])
-            # extend recommend_routine with products while avoiding duplicates
+            #extend recommend_routine with products while avoiding duplicates
             recommend_routine.extend(products)
 
         
