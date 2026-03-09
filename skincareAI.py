@@ -68,8 +68,7 @@ def check_missing_info_and_ask(user_profile):
         print()
         
         if missing == "skin_type":
-            skin_type = extract_all_skin_type_semantics(user_input)
-            user_profile.add_skin_type(skin_type)
+            user_profile.add_skin_type(extract_all_skin_type_semantics(user_input))
         elif missing == "concerns":
             concerns = extract_all_concerns_semantics(user_input)
             for item in concerns:
@@ -98,36 +97,17 @@ def extract_all_skin_type_semantics(text, min_similarity=0.35):
     # embed user text
     user_emb = model.encode(text)
     
+    # Semantic comparsion between user text and reference descriptions for each skin type
     references = {
-        "oily": (
-            "oily and greasy skin with excess sebum production, skin that becomes shiny quickly, "
-            "especially in the t zone, enlarged or visible pores, prone to acne, blackheads, "
-            "whiteheads, and frequent breakouts due to excess oil"
-        ),
+        "oily": "oily greasy shiny excess oil production enlarge pores",
 
-        "dry": (
-            "dry and dehydrated skin lacking moisture, tight or uncomfortable feeling, "
-            "flaky or rough texture, peeling skin, dull appearance, and skin that may feel "
-            "itchy or sensitive due to moisture loss"
-        ),
+        "dry": "dry dehyrated flaky tight rough texture lacking moisture dryness",
 
-        "combination": (
-            "combination skin with both oily and dry areas, oily or shiny t zone such as the "
-            "forehead nose and chin, while cheeks or other areas feel dry or normal, "
-            "mixed skin concerns that vary across different parts of the face"
-        ),
+        "combination": "combination mixed oily and dry areas",
 
-        "sensitive": (
-            "sensitive and reactive skin that becomes red easily, prone to irritation, "
-            "burning or stinging sensations, inflammation, itching, and discomfort after "
-            "using skincare products or exposure to environmental triggers"
-        ),
+        "sensitive": "sensitive reactive irrated red easily inflamed",
 
-        "normal": (
-            "normal and balanced skin that is neither oily nor dry, healthy skin with "
-            "even texture, minimal sensitivity, small pores, clear appearance, and "
-            "generally comfortable skin without frequent breakouts or dryness"
-        )
+        "normal": "normal balanced helath even comfortable"
     }
 
     
@@ -145,6 +125,8 @@ def extract_all_skin_type_semantics(text, min_similarity=0.35):
     
     best_score = scores[0][1]
     
+    print(f"Scores: {scores[0][0]}, {scores[0][1]:.4f}")
+    
     if best_score < min_similarity:
         return []
     else: 
@@ -154,41 +136,17 @@ def extract_all_concerns_semantics(text, min_similarity=0.35, margin=0.08):
     user_emb = model.encode(text)
     
     references = {
-        "acne": (
-            "acne prone skin with frequent pimples, breakouts, whiteheads, blackheads, "
-            "cystic acne, hormonal acne, clogged pores, excess oil production, "
-            "inflamed blemishes, painful spots, and recurring breakouts on the face or body"
-        ),
+        "acne": "acne pimples breakouts blemish clogged pores blackheads",
 
-        "aging": (
-            "signs of skin aging such as wrinkles, fine lines, crow's feet, "
-            "sagging skin, loss of firmness, reduced elasticity, dull appearance, "
-            "uneven texture, mature skin concerns, and age related skin changes"
-        ),
+        "aging": "wrinkles fine lines sagging firmness elasticity crow's feet",
 
-        "sensitivity": (
-            "sensitive and reactive skin that becomes red easily, irritated, itchy, "
-            "burning or stinging sensations, inflammation, discomfort after skincare products, "
-            "skin barrier damage, rosacea prone or easily inflamed skin"
-        ),
+        "sensitivity": "redness irritation reactive burning itching inflamed rosacea",
 
-        "sun protection": (
-            "concern about sun exposure and uv damage, need for sunscreen or spf, "
-            "preventing sunburn, protecting skin from uv rays, photoaging, "
-            "hyperpigmentation from sun exposure, and daily sun protection habits"
-        ),
+        "sun protection": "sun uv sunburn spf photoaging sun damage rays",
         
-        "hydration": (
-            "concern about dry and dehydrated skin, need for deep hydration and moisture, "
-            "relieving tightness or flakiness, improving skin barrier function, achieving plump, "
-            "and dewy skin, and maintaining long term skin hydration"
-        ),
+        "hydration": "dry dehydrated tight flaky moisture barrier plump",
         
-        "brightening": (
-            "concern about dull skin and uneven skin tone, need for brightening and radiance, "
-            "improving skin glow, reducing dark spots or hyperpigmentation, and achieving a more even skin tone"
-            "post-inflammatory hyperpigmentation from acne, sun spots, melasma, discoloration"
-        )
+        "brightening": "dull uneven dark spots hyperpigmentation glow discoloration melasma"
     }
     
     raw_scores = {}
@@ -221,41 +179,17 @@ def extract_all_goals_semantics(text, min_similarity=0.35, margin=0.08):
     user_emb = model.encode(text)
     
     references = {
-        "clear_skin": (
-            "goal of achieving clear and smooth skin, reducing acne, breakouts, "
-            "blemishes, dark spots, and uneven texture, wanting clean looking skin "
-            "with fewer imperfections and a more refined appearance"
-        ),
+        "clear_skin": "clear smooth clean blemish-free fewer breakouts refined",
 
-        "anti_aging": (
-            "goal of preventing or reducing signs of aging such as wrinkles, fine lines, "
-            "loss of firmness, sagging skin, and dullness, aiming for youthful, "
-            "plump, and healthy looking skin over time"
-        ),
+        "anti_aging": "youthful wrinkle-free firm plump reduce aging lines",
 
-        "hydration": (
-            "goal of deeply hydrating and moisturizing the skin, improving skin moisture "
-            "levels, achieving plump, soft, dewy skin, relieving dryness or tightness, "
-            "and maintaining a healthy skin barrier"
-        ),
+        "hydration": "hydrated moisturized dewy soft plump moisture barrier",
 
-        "protection": (
-            "goal of protecting the skin from environmental damage such as sun exposure, "
-            "uv rays, pollution, and free radicals, preventing sunburn, premature aging, "
-            "and long term skin damage through daily protection"
-        ),
+        "protection": "protect shield uv sun damage pollution prevention",
 
-        "soothe": (
-            "goal of soothing and calming irritated or sensitive skin, reducing redness, "
-            "inflammation, itching, or discomfort, and restoring comfort to stressed or "
-            "reactive skin"
-        ),
+        "soothe": "calm soothe reduce redness irritation comfort sensitive",
         
-        "brighten": (
-            "goal of achieving brighter, more radiant skin, reducing dullness, uneven skin tone, "
-            "dark spots, and hyperpigmentation, aiming for luminous, glowing complexion "
-            "with improved clarity and even-toned appearance"
-        )
+        "brighten": "bright radiant glow even tone luminous dark spots fade"
     }
     scores = []
     
@@ -526,6 +460,9 @@ def calculate_coverage(product, context):
         score -= 2
     
     # find how many concerns the product addresses that the user has
+    # product does not have concerns_addressed
+    # products is dictionary has label and details
+    # so to be able to go through i need to loop it
     product_concerns = set(product["concerns_addressed"])
     user_concerns = set(context["concerns"])
     # intersection
@@ -594,32 +531,13 @@ def have_conversation():
         
         # Print question
         print(f"Bot: {question}")
-         
-        # Get user input
-        user_input = input("You: ")
-        print() # new line for readability
-            
-        # Extract information based on the question asked and update user profile
-        if question.startswith("Tell me about your skin type"):
-            skin_types = extract_all_skin_type_semantics(user_input)
-            for item in skin_types:
-                user_profile.add_skin_type(item)
-        elif question.startswith("What concerns do you have about your skin"):
-            concerns = extract_all_concerns_semantics(user_input)
-            for item in concerns:
-                user_profile.add_concern(item)
-        elif question.startswith("What are your skincare goals"):
-            goals = extract_all_goals_semantics(user_input)
-            for item in goals:
-                user_profile.add_goal(item)
-        
         
         # Check if any information is missing and update profile
         # Not a very clean way to do this as its a string check - fix later
-        elif question.startswith("Thanks for sharing!"): 
+        if question.startswith("Thanks for sharing!"): 
             check_missing_info_and_ask(user_profile)
         
-            print("Bot: Here is what I gathered:\n")
+            print("Bot: Here is what I gathered:")
             print(f"  . Detected Skin Type: {user_profile.skin_type if user_profile.skin_type else 'Not detected'}")
             print(f"  . Detected Concerns: {user_profile.concerns if user_profile.concerns else 'None detected'}")
             print(f"  . Detected Goals: {user_profile.goals if user_profile.goals else 'No goals specified'}")
@@ -635,7 +553,29 @@ def have_conversation():
                 break
             else:
                 print("Please choose and answer with one of the number options listed.")
-    
+        
+        
+        # Get user input
+        user_input = input("You: ")
+        print() # new line for readability
+        
+        
+        # Extract information based on the question asked and update user profile
+        if question.startswith("Tell me about your skin type"):
+            user_profile.add_skin_type(extract_all_skin_type_semantics(user_input))
+        elif question.startswith("What concerns do you have about your skin"):
+            concerns = extract_all_concerns_semantics(user_input)
+            for item in concerns:
+                user_profile.add_concern(item)
+        elif question.startswith("What are your skincare goals"):
+            goals = extract_all_goals_semantics(user_input)
+            for item in goals:
+                user_profile.add_goal(item)
+        
+        
+
+        
+        
     routine_time = ""
     if user_done in ["1", "one"]:
         print("What routine would you like to generate first:\n")
