@@ -3,7 +3,9 @@ from collections import Counter
 from shlex import join
 
 from sentence_transformers import SentenceTransformer, util
+print("Loading AI model...")
 model = SentenceTransformer('all-MiniLM-L6-v2')
+print("Ready!\n")
 
 from collections import defaultdict # for product score and reasons (less if statements as keys are created on the go)
 
@@ -360,7 +362,7 @@ Product_Info = {
     "Gentle Fragence-Free Cleanser": {
         "type": "cleanser",
         "skin_types_addressed": ["sensitive"],
-        "conerns_addressed": ["sensitivity"],
+        "concerns_addressed": ["sensitivity"],
         "goals_addressed": ["soothe"],
         "description": "Gentle fragrance-free cleansers are formulated to cleanse the skin without stripping away natural oils or causing irritation, making them ideal for sensitive skin that can react to harsh ingredients."
     },
@@ -437,7 +439,7 @@ def recommend_for_product_type(category, context, count = 1):
         scored_candidates.append((category_product_name, category_product_details, score))
         
     # sort candidates by score
-    scored_candidates.sort(key=lambda x: x[2], reversed=True)
+    scored_candidates.sort(key=lambda x: x[2], reverse=True)
     results = []
     # [:count] to get top products based on count specified in Build Routine
     for product, info, score in scored_candidates[:count]:
@@ -448,7 +450,7 @@ def recommend_for_product_type(category, context, count = 1):
             "reason": generate_reasoning(info, context)
         })
         
-    return scored_candidates[:count]
+    return results
 
 def calculate_coverage(product, context):
     # Calculate how well a product addresses the user's skin type, concerns, and goals based on Product_Info and user profile
@@ -459,10 +461,6 @@ def calculate_coverage(product, context):
     else:
         score -= 2
     
-    # find how many concerns the product addresses that the user has
-    # product does not have concerns_addressed
-    # products is dictionary has label and details
-    # so to be able to go through i need to loop it
     product_concerns = set(product["concerns_addressed"])
     user_concerns = set(context["concerns"])
     # intersection
@@ -596,12 +594,18 @@ def have_conversation():
         }
         
         routine_blueprint = build_routine(context)
-        print(f"Routine Blueprint: {routine_blueprint}\n")
+
         recommend_routine = []
         for product_type in routine_blueprint:
             products = recommend_for_product_type(product_type["category"], context, product_type["count"])
-            #extend recommend_routine with products while avoiding duplicates
+            # extend recommend_routine with products while avoiding duplicates
             recommend_routine.extend(products)
+        
+        print(f"\nBased on your profile, I recommend the following {routine_time} routine:\n")
+        for item in recommend_routine:
+            print(f"  . Product: {item['product']}")
+            print(f"  . Type: {item['type']}")
+            print(f"  . Reasoning: {item['reason']}\n")
 
         
     elif user_done in ["2", "two"]:
