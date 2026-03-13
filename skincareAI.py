@@ -103,7 +103,7 @@ def adjust_user_profile(user_profile, aspect):
     print()
 
     # skintype easily updated as its one label
-    if aspect == "skin type":
+    if aspect == "skin_type":
         user_profile.add_skin_type(extract_all_skin_type_semantics(user_input))
     # update = True to handle new user input as override of previous info instead of appending to it
     elif aspect == "concerns":
@@ -542,8 +542,9 @@ def have_conversation():
     # Create user profile
     user_profile = UserProfile()
     number = 1
+    user_done = ""
         
-    # Main Conversation Loop
+    # Main Conversation Loop - gather user info and update profile
     while True:
         # Determine what to ask next
         question = what_to_ask_next(number)
@@ -563,17 +564,7 @@ def have_conversation():
             print(f"  . Detected Concerns: {user_profile.concerns if user_profile.concerns else 'None detected'}")
             print(f"  . Detected Goals: {user_profile.goals if user_profile.goals else 'No goals specified'}")
             
-            print("\nWould you like to:")
-            print("1. Satifisited with skincare information and move on to the routine")
-            print("2. Adjust detected skin type")
-            print("3. Adjust detected skin concerns")
-            print("4. Adjust detected skin goals")
-            print("5. Exit")
-            user_done = input("Enter 1-5\nYou: ").lower()
-            
-            if user_done not in ["1", "2", "3", "4", "5", "one", "two", "three", "four", "five"]:
-                print("Please choose and answer with one of the number options listed.")
-        
+            break
         
         # Get user input
         user_input = input("You: ")
@@ -591,19 +582,29 @@ def have_conversation():
             goals = extract_all_goals_semantics(user_input)
             for item in goals:
                 user_profile.add_goal(item)
+                
+    # Re-adjustsment and Routine Loop    
+    while True:
+        print("\nWould you like to:")
+        print("1. Satifisited with skincare information and move on to the routine")
+        print("2. Adjust detected skin type")
+        print("3. Adjust detected skin concerns")
+        print("4. Adjust detected skin goals")
+        print("5. Exit")
         
-        
-
-        
-        
+        user_done = input("Enter 1-5\nYou: ").lower()
+            
+        if user_done not in ["1", "2", "3", "4", "5", "one", "two", "three", "four", "five"]:
+                print("Please choose and answer with one of the number options listed.")    
         routine_time = ""
+        
         if user_done in ["1", "one"]:
             print("What routine would you like to generate first:\n")
             print("1: Morning a.m routine")
             print("2. Night p.m routine")
-            routine_input = input("Enter 1-2\nYou: ").lower()
+            routine_input = input("Enter 1 or 2\nYou: ").lower()
             
-            if routine_input == "1" or "one":
+            if routine_input == "1" or routine_input == "one":
                 routine_time = "a.m"
             elif routine_input == "2" or "two":
                 routine_time = "p.m"
@@ -628,8 +629,8 @@ def have_conversation():
                 print(f"  . Product: {item['product']}")
                 print(f"  . Type: {item['type']}")
                 print(f"  . Reasoning: {item['reason']}\n")
-
-            
+                break
+   
         elif user_done in ["2", "two"]:
             # adjust user skin type
             adjust_user_profile(user_profile, "skin_type")
@@ -642,17 +643,11 @@ def have_conversation():
         elif user_done in ["4", "four"]:
             # adjust user skin goal
             adjust_user_profile(user_profile, "goals")
-            print(f"Bot: Updated skin goals to {user_profile.goals}.")`
+            print(f"Bot: Updated skin goals to {user_profile.goals}.")
         elif user_done in ["5", "five"]:
             print("Bot: Thank you for using the Skincare AI Consultant! Have a great day!")
             break
-    
 
-
-    
-    #for product in recommended_products:
-     #   print(f"  . Product: {product['product']}")
-      #  print(f"  . Reasons: {product['reasons']}\n")
         
 
 
