@@ -19,12 +19,17 @@ class UserProfile:
     def add_skin_type(self, skin_type):
         self.skin_type = skin_type
     
-    def add_concern(self, concern):
-        if concern not in self.concerns:
+    def add_concern(self, concern, update=False):
+        # if update is true we override previous concerns with new concern else we append to concerns list
+        if update:
+            self.concerns = [concern]
+        elif concern not in self.concerns:
             self.concerns.append(concern)
                 
-    def add_goal(self, goal):
-        if goal not in self.goals:
+    def add_goal(self, goal, update=False):
+        if update:
+            self.goals = [goal]
+        elif goal not in self.goals:
             self.goals.append(goal)
     
 
@@ -91,7 +96,25 @@ def check_missing_info_and_ask(user_profile):
                 user_profile.add_goal("general") 
             break
 
-        
+def adjust_user_profile(user_profile, aspect):
+    # update user profile based on aspect (skin type, concerns, goals) and new user input
+    print(f"Bot: Let's adjust your {aspect}. Please provide the updated information.")
+    user_input = input("You: ")
+    print()
+
+    # skintype easily updated as its one label
+    if aspect == "skin type":
+        user_profile.add_skin_type(extract_all_skin_type_semantics(user_input))
+    # update = True to handle new user input as override of previous info instead of appending to it
+    elif aspect == "concerns":
+        concerns = extract_all_concerns_semantics(user_input)
+        for item in concerns:
+            user_profile.add_concern(item, update=True)
+    elif aspect == "goals":
+        goals = extract_all_goals_semantics(user_input)
+        for item in goals:
+            user_profile.add_goal(item, update=True)
+
 # ==================== ML Semantics ====================
 
 def extract_all_skin_type_semantics(text, min_similarity=0.35):
@@ -545,11 +568,10 @@ def have_conversation():
             print("2. Adjust detected skin type")
             print("3. Adjust detected skin concerns")
             print("4. Adjust detected skin goals")
-            user_done = input("Enter 1-4\nYou: ").lower()
+            print("5. Exit")
+            user_done = input("Enter 1-5\nYou: ").lower()
             
-            if user_done in ["1", "2", "3", "4", "one", "two", "three", "four"]:
-                break
-            else:
+            if user_done not in ["1", "2", "3", "4", "5", "one", "two", "three", "four", "five"]:
                 print("Please choose and answer with one of the number options listed.")
         
         
@@ -574,49 +596,56 @@ def have_conversation():
 
         
         
-    routine_time = ""
-    if user_done in ["1", "one"]:
-        print("What routine would you like to generate first:\n")
-        print("1: Morning a.m routine")
-        print("2. Night p.m routine")
-        routine_input = input("Enter 1-2\nYou: ").lower()
-        
-        if routine_input == "1" or "one":
-            routine_time = "a.m"
-        elif routine_input == "2" or "two":
-            routine_time = "p.m"
-        
-        context = {
-            "time": routine_time,
-            "skin_type": user_profile.skin_type,
-            "concerns": user_profile.concerns,
-            "goals": user_profile.goals
-        }
-        
-        routine_blueprint = build_routine(context)
+        routine_time = ""
+        if user_done in ["1", "one"]:
+            print("What routine would you like to generate first:\n")
+            print("1: Morning a.m routine")
+            print("2. Night p.m routine")
+            routine_input = input("Enter 1-2\nYou: ").lower()
+            
+            if routine_input == "1" or "one":
+                routine_time = "a.m"
+            elif routine_input == "2" or "two":
+                routine_time = "p.m"
+            
+            context = {
+                "time": routine_time,
+                "skin_type": user_profile.skin_type,
+                "concerns": user_profile.concerns,
+                "goals": user_profile.goals
+            }
+            
+            routine_blueprint = build_routine(context)
 
-        recommend_routine = []
-        for product_type in routine_blueprint:
-            products = recommend_for_product_type(product_type["category"], context, product_type["count"])
-            # extend recommend_routine with products while avoiding duplicates
-            recommend_routine.extend(products)
-        
-        print(f"\nBased on your profile, I recommend the following {routine_time} routine:\n")
-        for item in recommend_routine:
-            print(f"  . Product: {item['product']}")
-            print(f"  . Type: {item['type']}")
-            print(f"  . Reasoning: {item['reason']}\n")
+            recommend_routine = []
+            for product_type in routine_blueprint:
+                products = recommend_for_product_type(product_type["category"], context, product_type["count"])
+                # extend recommend_routine with products while avoiding duplicates
+                recommend_routine.extend(products)
+            
+            print(f"\nBased on your profile, I recommend the following {routine_time} routine:\n")
+            for item in recommend_routine:
+                print(f"  . Product: {item['product']}")
+                print(f"  . Type: {item['type']}")
+                print(f"  . Reasoning: {item['reason']}\n")
 
-        
-    elif user_done in ["2", "two"]:
-        # adjust user skin type
-        pass
-    elif user_done in ["3", "three"]:
-        # adjust user skin concern
-        pass
-    elif user_done in ["4", "four"]:
-        # adjust user skin goal
-        pass
+            
+        elif user_done in ["2", "two"]:
+            # adjust user skin type
+            adjust_user_profile(user_profile, "skin_type")
+            print(f"Bot: Updated skin type to {user_profile.skin_type}.")
+            
+        elif user_done in ["3", "three"]:
+            # adjust user skin concern
+            adjust_user_profile(user_profile, "concerns")
+            print(f"Bot: Updated skin concerns to {user_profile.concerns}.")
+        elif user_done in ["4", "four"]:
+            # adjust user skin goal
+            adjust_user_profile(user_profile, "goals")
+            print(f"Bot: Updated skin goals to {user_profile.goals}.")`
+        elif user_done in ["5", "five"]:
+            print("Bot: Thank you for using the Skincare AI Consultant! Have a great day!")
+            break
     
 
 
