@@ -1,6 +1,7 @@
 import re # regular expressions for text cleaning
 from collections import Counter
 from shlex import join
+import random # random number generator
 
 from sentence_transformers import SentenceTransformer, util
 print("Loading AI model...")
@@ -14,8 +15,14 @@ class UserProfile:
     def __init__(self):
         self.skin_type = None
         self.concerns = []
-        self.goals = []   
-        
+        self.goals = []
+        self.am_routine = []
+        self.pm_routine = []
+        self.unique_id = 0
+    
+    def add_unique_id(self, id):
+        self.unique_id = id
+    
     def add_skin_type(self, skin_type):
         self.skin_type = skin_type
     
@@ -31,6 +38,12 @@ class UserProfile:
             self.goals = [goal]
         elif goal not in self.goals:
             self.goals.append(goal)
+    
+    def add_routine(self, routine, time):
+        if time == "a.m":
+           self.am_routine = routine
+        elif time == "p.m":
+            self.pm_routine = routine
     
 
 # Function to determine what to ask next based on missing info one at a time in user profile
@@ -128,11 +141,11 @@ def extract_all_skin_type_semantics(text, min_similarity=0.35):
 
         "dry": "dry dehyrated flaky tight rough texture lacking moisture dryness",
 
-        "combination": "combination mixed oily and dry areas",
+        "combination": "combination with t-zone shiny greasy forehead nose chin cheeks tight patchy uneven zones",
 
-        "sensitive": "sensitive reactive irrated red easily inflamed",
+        "sensitive": "sensitive reactive irritated red easily inflamed",
 
-        "normal": "normal balanced helath even comfortable"
+        "normal": "normal balanced healthy even comfortable"
     }
 
     
@@ -150,8 +163,6 @@ def extract_all_skin_type_semantics(text, min_similarity=0.35):
     
     best_score = scores[0][1]
     
-    print(f"Scores: {scores[0][0]}, {scores[0][1]:.4f}")
-    
     if best_score < min_similarity:
         return []
     else: 
@@ -163,9 +174,9 @@ def extract_all_concerns_semantics(text, min_similarity=0.35, margin=0.08):
     references = {
         "acne": "acne pimples breakouts blemish clogged pores blackheads",
 
-        "aging": "wrinkles fine lines sagging firmness elasticity crow's feet",
+        "aging": "aging wrinkles fine lines sagging firmness elasticity crow's feet",
 
-        "sensitivity": "redness irritation reactive burning itching inflamed rosacea",
+        "sensitivity": "sensitive redness irritation reactive burning itching inflamed rosacea",
 
         "sun protection": "sun uv sunburn spf photoaging sun damage rays",
         
@@ -523,6 +534,8 @@ def generate_reasoning(info, context):
         reasoning.append("May not directly align with your specific goals, but could still contribute to overall skin health.")
     
     return " ".join(reasoning)
+
+
     
 
 # ================= PRODUCT RECOMMENDATIONS END =================
@@ -543,6 +556,21 @@ def have_conversation():
     user_profile = UserProfile()
     number = 1
     user_done = ""
+    
+    print("Bot: What is your name?")
+    name_input = input("You: ")
+    print()
+    
+    # generate unique_id that is unique per user    
+    unique_id = 0
+    while True:
+        unique_id = random.randint(1000, 9999)
+        if unique_id not in user_profile:
+            user_profile.add_unique_id(unique_id)
+            break 
+        
+    print(f"Nice to meet you {name_input}. Here is your unique ID to receive your profile {unique_id}")
+    
         
     # Main Conversation Loop - gather user info and update profile
     while True:
@@ -590,7 +618,7 @@ def have_conversation():
         print("2. Adjust detected skin type")
         print("3. Adjust detected skin concerns")
         print("4. Adjust detected skin goals")
-        print("5. Exit")
+        print("5. Save and Exit")
         
         user_done = input("Enter 1-5\nYou: ").lower()
             
@@ -617,6 +645,7 @@ def have_conversation():
             }
             
             routine_blueprint = build_routine(context)
+            print(f"Blueprint: {routine_blueprint}.")
 
             recommend_routine = []
             for product_type in routine_blueprint:
@@ -624,12 +653,15 @@ def have_conversation():
                 # extend recommend_routine with products while avoiding duplicates
                 recommend_routine.extend(products)
             
+            user_profile.add_routine(recommend_routine, routine_time)
+            
             print(f"\nBased on your profile, I recommend the following {routine_time} routine:\n")
             for item in recommend_routine:
                 print(f"  . Product: {item['product']}")
                 print(f"  . Type: {item['type']}")
                 print(f"  . Reasoning: {item['reason']}\n")
-                break
+        
+            
    
         elif user_done in ["2", "two"]:
             # adjust user skin type
