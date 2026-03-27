@@ -2,6 +2,18 @@ import re # regular expressions for text cleaning
 from collections import Counter
 from shlex import join
 import random # random number generator
+import json # for saving userProfile data
+
+# read json file
+with open("profile.json", "r") as f:
+    data = json.load(f)
+    
+# modify json file
+data["users"]["1003"] = {"name": "Charile", "age": 30}
+
+# write back json file
+with open("profile.json", "w") as f:
+    json.dump(data, f, index=4)
 
 from sentence_transformers import SentenceTransformer, util
 print("Loading AI model...")
@@ -565,7 +577,7 @@ def have_conversation():
     unique_id = 0
     while True:
         unique_id = random.randint(1000, 9999)
-        if unique_id not in user_profile:
+        if unique_id not in user_profile.unique_id:
             user_profile.add_unique_id(unique_id)
             break 
         
@@ -677,7 +689,7 @@ def have_conversation():
             adjust_user_profile(user_profile, "goals")
             print(f"Bot: Updated skin goals to {user_profile.goals}.")
         elif user_done in ["5", "five"]:
-            print("Bot: Thank you for using the Skincare AI Consultant! Have a great day!")
+            print("Bot: Thank you for using the Skincare AI Consultant! Have a great day!\nUse your unique ID: {unique_id} to access your profile again.")
             break
 
         
@@ -687,8 +699,3 @@ def have_conversation():
 if __name__ == "__main__":
     have_conversation()
     
-    
-# sematic verbosity 
-# EX: I have oily skin
-# User 1: My skin get extremely oily throughout the day around my nose and forehead and I constantly feel greasy
-# User 2: Both user inputs means the same but due to second input having more descriptive languaage it will have higher semantics scoring.
