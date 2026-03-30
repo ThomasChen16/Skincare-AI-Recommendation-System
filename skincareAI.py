@@ -203,6 +203,7 @@ def extract_all_concerns_semantics(text, min_similarity=0.35, margin=0.08):
     for label, references_text in references.items():
         ref_emb = model.encode(references_text)
         raw_scores[label] = util.cos_sim(user_emb, ref_emb).item()
+        print(raw_scores)
         
     # holds best score
     best_score = max(raw_scores.values())
@@ -215,6 +216,7 @@ def extract_all_concerns_semantics(text, min_similarity=0.35, margin=0.08):
         # purpose: Find other labels that are also good matches (multi answers)
         # raw_score: similarity score
         # relative_score: score compared to best score (0.0 to 1.0)
+        print(detected)
         if score >= min_similarity and (best_score - score) <= margin:
             detected.append(label)
     
@@ -573,10 +575,10 @@ def have_conversation():
             existing_data = json.load(f)
     except (FileNotFoundError, json.JSONDecodeError):
         existing_data = {"users": {}}
-        
-    while True:
+    login_status = False    
+    while not login_status:
         existing_profile = input("You: ").lower()
-        if existing_profile in ["yes", "y"]:
+        if existing_profile.startswith("yes") or existing_profile == "y":
             unique_id_attempts = 0
             # while loop to allow user 3 attempts to enter correct unique ID
             while unique_id_attempts < 3:
@@ -602,18 +604,21 @@ def have_conversation():
                     print(f"  . Detected Goals: {user_profile.goals if user_profile.goals else 'No goals specified'}")
                     print(f"  . Detected Morning Routine: {user_profile.am_routine if user_profile.am_routine else 'No routine detected'}")
                     print(f"  . Detected Night Routine: {user_profile.pm_routine if user_profile.pm_routine else 'No routine detected'}")
+                    login_status = True
                     break
                 else:
                     print("Sorry, I couldn't find a profile with that ID.")
                     unique_id_attempts += 1
                     
                 if unique_id_attempts >= 3:
-                        print("Let's create a new profile instead.")
+                        print("Let's create a new profile instead.\n")
+                        login_status = True
+                        break
                 
             
-        elif existing_profile in ["no", "n"]:
-            print("No problem! Let's create a new profile for you.")
-            break
+        elif existing_profile.startswith("no") or existing_profile == "n":
+            print("No problem! Let's create a new profile for you.\n")
+            login_status = True
         else:
             print("Please answer with yes or no.")
     
@@ -743,8 +748,9 @@ def have_conversation():
             adjust_user_profile(user_profile, "goals")
             print(f"Bot: Updated skin goals to {user_profile.goals}.")
         elif user_done in ["5", "five"]:
-            print("Bot: Thank you for using the Skincare AI Consultant! Have a great day!\nUse your unique ID: {unique_id} to access your profile again.")
+            print(f"Bot: Thank you for using the Skincare AI Consultant! Have a great day!\nUse your unique ID: {user_profile.unique_id} to access your profile again.")
             data = {
+                    "name": user_profile.name,
                     "skin_type": user_profile.skin_type,
                     "concerns": user_profile.concerns,
                     "goals": user_profile.goals,
@@ -753,7 +759,7 @@ def have_conversation():
                     }
             
             # append new user data to file
-            existing_data["users"][str(unique_id)] = data
+            existing_data["users"][str(user_profile.unique_id)] = data
             
             # write data back to json file
             with open("profile.json", "w") as f:
