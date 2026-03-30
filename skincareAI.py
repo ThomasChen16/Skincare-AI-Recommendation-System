@@ -5,15 +5,15 @@ import random # random number generator
 import json # for saving userProfile data
 
 # read json file
-with open("profile.json", "r") as f:
-    data = json.load(f)
+#with open("profile.json", "r") as f:
+#    data = json.load(f)
     
 # modify json file
-data["users"]["1003"] = {"name": "Charile", "age": 30}
+#data["users"]["1003"] = {"name": "Charile", "age": 30}
 
 # write back json file
-with open("profile.json", "w") as f:
-    json.dump(data, f, index=4)
+#with open("profile.json", "w") as f:
+#    json.dump(data, f, index=4)
 
 from sentence_transformers import SentenceTransformer, util
 print("Loading AI model...")
@@ -25,15 +25,14 @@ from collections import defaultdict # for product score and reasons (less if sta
 # User Profile Class to store user info
 class UserProfile:
     def __init__(self):
+        self.unique_id = 0
+        self.name = None
         self.skin_type = None
         self.concerns = []
         self.goals = []
         self.am_routine = []
         self.pm_routine = []
-        self.unique_id = 0
     
-    def add_unique_id(self, id):
-        self.unique_id = id
     
     def add_skin_type(self, skin_type):
         self.skin_type = skin_type
@@ -563,6 +562,60 @@ def clean_text(text):
 # Main Conservation Function Loop
 def have_conversation():
     print("Welcome to the Skincare AI Consultant!\n")
+    print("Do you have an existing profile? (yes/no)")
+    
+    
+    # open profile.json file and load exisiting data if any
+    # edge case: if file does not exist create it with empty user data
+    # edge case: if file is empty we should also handle that and create empty user data
+    try:
+        with open("profile.json", "r") as f:
+            existing_data = json.load(f)
+    except (FileNotFoundError, json.JSONDecodeError):
+        existing_data = {"users": {}}
+        
+    while True:
+        existing_profile = input("You: ").lower()
+        if existing_profile in ["yes", "y"]:
+            unique_id_attempts = 0
+            # while loop to allow user 3 attempts to enter correct unique ID
+            while unique_id_attempts < 3:
+                unique_id_input = input("Enter your unique ID: ")
+        
+                # Add users data back into the UserProfile class and continue conversation
+                if unique_id_input in existing_data["users"]:
+                    user_data = existing_data["users"][unique_id_input]
+                    user_profile = UserProfile()
+                    user_profile.unique_id = unique_id_input
+                    user_profile.add_skin_type(user_data.get("skin_type"))
+                    for concern in user_data.get("concerns", []):
+                        user_profile.add_concern(concern)
+                    for goal in user_data.get("goals", []):
+                        user_profile.add_goal(goal)
+                    user_profile.am_routine = user_data.get("am_routine", [])
+                    user_profile.pm_routine = user_data.get("pm_routine", [])
+                    user_profile.add_routine(user_profile.am_routine, "a.m")
+                    user_profile.add_routine(user_profile.pm_routine, "p.m")
+                    print(f"Welcome back {user_profile.name}! I have loaded your profile. Let's review and adjust if needed before we move on.")
+                    print(f"  . Detected Skin Type: {user_profile.skin_type if user_profile.skin_type else 'Not detected'}")
+                    print(f"  . Detected Concerns: {user_profile.concerns if user_profile.concerns else 'None detected'}")
+                    print(f"  . Detected Goals: {user_profile.goals if user_profile.goals else 'No goals specified'}")
+                    print(f"  . Detected Morning Routine: {user_profile.am_routine if user_profile.am_routine else 'No routine detected'}")
+                    print(f"  . Detected Night Routine: {user_profile.pm_routine if user_profile.pm_routine else 'No routine detected'}")
+                    break
+                else:
+                    print("Sorry, I couldn't find a profile with that ID.")
+                    unique_id_attempts += 1
+                    
+                if unique_id_attempts >= 3:
+                        print("Let's create a new profile instead.")
+                
+            
+        elif existing_profile in ["no", "n"]:
+            print("No problem! Let's create a new profile for you.")
+            break
+        else:
+            print("Please answer with yes or no.")
     
     # Create user profile
     user_profile = UserProfile()
@@ -577,11 +630,12 @@ def have_conversation():
     unique_id = 0
     while True:
         unique_id = random.randint(1000, 9999)
-        if unique_id not in user_profile.unique_id:
-            user_profile.add_unique_id(unique_id)
+        if unique_id not in existing_data["users"]:
+            user_profile.unique_id = unique_id
             break 
         
     print(f"Nice to meet you {name_input}. Here is your unique ID to receive your profile {unique_id}")
+    user_profile.name = name_input
     
         
     # Main Conversation Loop - gather user info and update profile
@@ -690,6 +744,20 @@ def have_conversation():
             print(f"Bot: Updated skin goals to {user_profile.goals}.")
         elif user_done in ["5", "five"]:
             print("Bot: Thank you for using the Skincare AI Consultant! Have a great day!\nUse your unique ID: {unique_id} to access your profile again.")
+            data = {
+                    "skin_type": user_profile.skin_type,
+                    "concerns": user_profile.concerns,
+                    "goals": user_profile.goals,
+                    "am_routine": user_profile.am_routine,
+                    "pm_routine": user_profile.pm_routine
+                    }
+            
+            # append new user data to file
+            existing_data["users"][str(unique_id)] = data
+            
+            # write data back to json file
+            with open("profile.json", "w") as f:
+                json.dump(existing_data, f, indent=4)
             break
 
         
