@@ -1,4 +1,3 @@
-import re # regular expressions for text cleaning
 from collections import Counter
 from shlex import join
 import random # random number generator
@@ -58,67 +57,15 @@ class UserProfile:
     
 
 # Function to determine what to ask next based on missing info one at a time in user profile
-def what_to_ask_next(question_number):
-    if question_number == 1:
-        return "Tell me about your skin type. How would you describe it? "
-    elif question_number == 2:
-        return "What concerns do you have about your skin? "
-    elif question_number == 3:
-        return "What are your skincare goals? "
+def what_to_ask_next(user_profile):
+    if not user_profile.skin_type:
+        return ("Tell me about your skin type. How would you describe it? ", "skin_type")
+    elif not user_profile.concerns:
+        return ("What concerns do you have about your skin? ", "concerns")
+    elif not user_profile.goals:
+        return ("What are your skincare goals? ", "goals")
     else:
-        return "Thanks for sharing!\n"
-
-
-# Function to generate follow-up question based on missing info
-def generate_followup_questions(missing_info):
-    if missing_info == "skin_type":
-        return "Can you tell me more about your skin? For example, is it oily, dry, or a mix of both? "
-    elif missing_info == "concerns":
-        return "Can you tell me more about specific skin concerns are you hoping to address? For example, would it be acne, aging, sensitivity, or something else? "
-    elif missing_info == "goals":
-        return "Can you tell me more about your main skincare goals? Do you hope to improve hydration, reduce wrinkles, or something else? "
-    
-    
-# Function to check if there is missing info after extracting from user input if so we call generate_followup_questions
-def check_missing_info_and_ask(user_profile):
-    attempt = 0
-    while True:
-        if not user_profile.skin_type:
-            missing = "skin_type"
-        elif not user_profile.concerns:
-            missing = "concerns"
-        elif not user_profile.goals:
-            missing = "goals"
-        else:
-            break
-        
-        question = generate_followup_questions(missing)
-        
-        print(f"Bot: {question}")
-        user_input = input("You: ")
-        print()
-        
-        if missing == "skin_type":
-            user_profile.add_skin_type(extract_all_skin_type_semantics(user_input))
-        elif missing == "concerns":
-            concerns = extract_all_concerns_semantics(user_input)
-            for item in concerns:
-                user_profile.add_concern(item)
-        elif missing == "goals":
-            goals = extract_all_goals_semantics(user_input)
-            for item in goals:
-                user_profile.add_goal(item)
-
-        attempt += 1
-        if attempt >= 3: # if after 3 attempts we still have missing info we break and move on
-            print("Bot: No worries, we can move on with the information we have and adjust later if needed.")
-            if not user_profile.skin_type:
-                user_profile.add_skin_type("general") # default
-            if not user_profile.concerns:
-                user_profile.add_concern("general")
-            if not user_profile.goals:
-                user_profile.add_goal("general") 
-            break
+        return None
 
 def adjust_user_profile(user_profile, aspect):
     # update user profile based on aspect (skin type, concerns, goals) and new user input
@@ -179,7 +126,7 @@ def extract_all_skin_type_semantics(text, min_similarity=0.35):
     else: 
         return scores[0][0]
 
-def extract_all_concerns_semantics(text, min_similarity=0.35, margin=0.08):
+def extract_all_concerns_semantics(text, min_similarity=0.35, top_k=3):
     user_emb = model.encode(text)
     
     references = {
@@ -197,34 +144,28 @@ def extract_all_concerns_semantics(text, min_similarity=0.35, margin=0.08):
     }
     
     raw_scores = {}
-    scores = []
     
     # calculate similarity score between reference text and user text
+    # raw_scores[label] = similarity score
     for label, references_text in references.items():
         ref_emb = model.encode(references_text)
         raw_scores[label] = util.cos_sim(user_emb, ref_emb).item()
-        print(raw_scores)
         
-    # holds best score
-    best_score = max(raw_scores.values())
+    # sort labels by similarity score (highest to lowest)
+    sorted_labels = sorted(raw_scores, key=raw_scores.get, reveresd=True)
     
     detected = []
-    for label, score in raw_scores.items():
-        # keep labels that are:
-        # 1. reasonably similar (min similarity)
-        # 2. close to the best score (margin)
-        # purpose: Find other labels that are also good matches (multi answers)
-        # raw_score: similarity score
-        # relative_score: score compared to best score (0.0 to 1.0)
-        print(detected)
-        if score >= min_similarity and (best_score - score) <= margin:
+    # filer if similarity score is above min_similarity threshold and top_k?
+    for label, score in sorted_labels:
+        if score >= min_similarity:
             detected.append(label)
-    
-    return detected
+            
+    # return top 3 most similar labels 
+    return detected[:top_k]
         
        
     
-def extract_all_goals_semantics(text, min_similarity=0.35, margin=0.08):
+def extract_all_goals_semantics(text, min_similarity=0.35, top_k=3):
     user_emb = model.encode(text)
     
     references = {
@@ -240,24 +181,25 @@ def extract_all_goals_semantics(text, min_similarity=0.35, margin=0.08):
         
         "brighten": "bright radiant glow even tone luminous dark spots fade"
     }
-    scores = []
+    raw_scores = {}
     
+    # calculate similarity score between reference text and user text
+    # raw_scores[label] = similarity score
     for label, references_text in references.items():
         ref_emb = model.encode(references_text)
-        similarity = util.cos_sim(user_emb, ref_emb).item()
-        scores.append((label, similarity))
-            
+        raw_scores[label] = util.cos_sim(user_emb, ref_emb).item()
         
-    scores.sort(key=lambda x: x[1], reverse=True)
+    # sort labels by similarity score (highest to lowest)
+    sorted_labels = sorted(raw_scores, key=raw_scores.get, reveresd=True)
     
-    best_score = scores[0][1]
     detected = []
-    
-    for label, score in scores:
-        if score >= min_similarity and (best_score - score) <= margin:
+    # filer if similarity score is above min_similarity threshold and top_k?
+    for label, score in sorted_labels:
+        if score >= min_similarity:
             detected.append(label)
-
-    return detected 
+            
+    # return top 3 most similar labels 
+    return detected[:top_k]
 
 
 # ==================== ML Semantics END ====================
@@ -552,14 +494,7 @@ def generate_reasoning(info, context):
     
 
 # ================= PRODUCT RECOMMENDATIONS END =================
-# clean up text
-def clean_text(text):
-    # clean user text
-    text = text.lower() 
-    text = re.sub(r'[^a-z0-9\s]', '', text)  # Remove punctuation
-    text = re.sub(r'\s+', ' ', text).strip()  # Remove extra spaces
-    
-    return text
+# ============ CONVERSATION AND PROFILE MANAGEMENT ===============
 
 # Main Conservation Function Loop
 def have_conversation():
@@ -612,6 +547,8 @@ def have_conversation():
                     
                 if unique_id_attempts >= 3:
                         print("Let's create a new profile instead.\n")
+                        # edit correct answer to existing_profile to enter correct conversation flow
+                        existing_profile = "no" 
                         login_status = True
                         break
                 
@@ -627,60 +564,112 @@ def have_conversation():
     number = 1
     user_done = ""
     
-    print("Bot: What is your name?")
-    name_input = input("You: ")
-    print()
-    
-    # generate unique_id that is unique per user    
-    unique_id = 0
-    while True:
-        unique_id = random.randint(1000, 9999)
-        if unique_id not in existing_data["users"]:
-            user_profile.unique_id = unique_id
-            break 
+    if existing_profile.startswith("no") or existing_profile == "n":
+        print("Bot: What is your name?")
+        name_input = input("You: ")
+        print()
         
-    print(f"Nice to meet you {name_input}. Here is your unique ID to receive your profile {unique_id}")
-    user_profile.name = name_input
+        # generate unique_id that is unique per user    
+        unique_id = 0
+        while True:
+            unique_id = random.randint(1000, 9999)
+            if unique_id not in existing_data["users"]:
+                user_profile.unique_id = unique_id
+                break 
+            
+        print(f"Nice to meet you {name_input}. Here is your unique ID to receive your profile {unique_id}")
+        user_profile.name = name_input
     
         
     # Main Conversation Loop - gather user info and update profile
     while True:
         # Determine what to ask next
-        question = what_to_ask_next(number)
-        if number <= 3:
-            number += 1
-        
-        # Print question
-        print(f"Bot: {question}")
+        question = what_to_ask_next(user_profile)
         
         # Check if any information is missing and update profile
-        # Not a very clean way to do this as its a string check - fix later
-        if question.startswith("Thanks for sharing!"): 
-            check_missing_info_and_ask(user_profile)
+        if question is None:
+            print("Thanks for sharing all that information! I have what I need to recommend a skincare routine for you. If you want to adjust any of the detected information we can do that in the next steps.")
         
             print("Bot: Here is what I gathered:")
             print(f"  . Detected Skin Type: {user_profile.skin_type if user_profile.skin_type else 'Not detected'}")
             print(f"  . Detected Concerns: {user_profile.concerns if user_profile.concerns else 'None detected'}")
             print(f"  . Detected Goals: {user_profile.goals if user_profile.goals else 'No goals specified'}")
-            
             break
+        
+        # Print question
+        print(f"Bot: {question[0]}")
         
         # Get user input
         user_input = input("You: ")
         print() # new line for readability
         
+        # attempt counter for missing info to determine how many times we ask follow up question before we move on (3 attempts)
+        missing_info_attempts = 0
         
-        # Extract information based on the question asked and update user profile
-        if question.startswith("Tell me about your skin type"):
+        # Determine what question was asked based on what_to_ask_next() output and extract user input and update user profile
+        if question[1] == "skin_type":
             user_profile.add_skin_type(extract_all_skin_type_semantics(user_input))
-        elif question.startswith("What concerns do you have about your skin"):
+            
+            while not user_profile.skin_type:
+                # follow up question if couldn't detect skin type from user input
+                print("Bot: I couldn't quite detect your skin type from that. Can you tell me more about your skin? For example, is it oily, dry, or a mix of both?")
+                user_input = input("You: ")
+                print()
+                user_profile.add_skin_type(extract_all_skin_type_semantics(user_input))
+                if not user_profile.skin_type:
+                    missing_info_attempts += 1
+                if missing_info_attempts >= 3:
+                    # reset missing_info_attempts after done so it can be used for other missing info if needed
+                    missing_info_attempts = 0
+                    print("Bot: No worries, we can move on with the information we have and adjust later if needed.")
+                    user_profile.add_skin_type("general") # default
+                    break
+                if user_profile.skin_type:
+                    # reset attempts if we do detect skin type so it can be used for other missing info if needed
+                    missing_info_attempts = 0 
+                
+        elif question[1] == "concerns":
             concerns = extract_all_concerns_semantics(user_input)
             for item in concerns:
                 user_profile.add_concern(item)
-        elif question.startswith("What are your skincare goals"):
+            while not user_profile.concerns:
+                print("Can you tell me more about specific skin concerns are you hoping to address? For example, would it be acne, aging, sensitivity, or something else?")
+                user_input = input("You: ")
+                print()
+                concerns = extract_all_concerns_semantics(user_input)
+                for item in concerns:
+                    user_profile.add_concern(item)
+                if not user_profile.concerns:
+                    missing_info_attempts += 1
+                if missing_info_attempts >= 3:
+                    missing_info_attempts = 0
+                    print("Bot: No worries, we can move on with the information we have and adjust later if needed.")
+                    user_profile.add_concern("general") # default
+                    break
+                if user_profile.concerns:
+                    # reset attempts when done
+                    missing_info_attempts = 0
+        elif question[1] == "goals":
             goals = extract_all_goals_semantics(user_input)
             for item in goals:
                 user_profile.add_goal(item)
+            while not user_profile.goals:
+                print("Can you tell me more about your main skincare goals? Do you hope to improve hydration, reduce wrinkles, or something else?")
+                user_input = input("You: ")
+                print()
+                goals = extract_all_goals_semantics(user_input)
+                for item in goals:
+                    user_profile.add_goal(item)
+                if not user_profile.goals:
+                    missing_info_attempts += 1
+                if missing_info_attempts >= 3:
+                    missing_info_attempts = 0
+                    print("Bot: No worries, we can move on with the information we have and adjust later if needed.")
+                    user_profile.add_goal("general") # default
+                    break
+                if user_profile.goals:
+                    # reset attempts when done
+                    missing_info_attempts = 0
                 
     # Re-adjustsment and Routine Loop    
     while True:
