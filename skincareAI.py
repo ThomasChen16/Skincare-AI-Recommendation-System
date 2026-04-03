@@ -360,10 +360,6 @@ Product_Knowledge = {
 }
 
 
-# now i made the product_rules but am not sure how to use it yet
-# product_rules should be used for building the routine with the recommended products
-# product_rule is not done yet as i did not take into account the user profile when building the routine
-# use rule base system to build routine based on user profile 
 
 # role activation logic
 # blueprint routine based of product rules
@@ -644,6 +640,8 @@ def have_conversation():
                         # edit correct answer to existing_profile to enter correct conversation flow
                         existing_profile = "no" 
                         login_status = True
+                        # create user profile
+                        user_profile = UserProfile()
                         break
                 
             
@@ -653,8 +651,6 @@ def have_conversation():
         else:
             print("Please answer with yes or no.")
     
-    # Create user profile
-    user_profile = UserProfile()
     number = 1
     user_done = ""
     
@@ -671,7 +667,7 @@ def have_conversation():
                 user_profile.unique_id = unique_id
                 break 
             
-        print(f"Nice to meet you {name_input}. Here is your unique ID to receive your profile {unique_id}")
+        print(f"Nice to meet you {name_input}. Here is your unique ID to receive your profile: {unique_id}")
         user_profile.name = name_input
     
         
@@ -781,43 +777,52 @@ def have_conversation():
         routine_time = ""
         
         if user_done in ["1", "one"]:
-            print("What routine would you like to generate first:\n")
-            print("1: Morning a.m routine")
-            print("2. Night p.m routine")
-            routine_input = input("Enter 1 or 2\nYou: ").lower()
+            while True:
+                print("What routine would you like to generate first:\n")
+                print("1: Morning a.m routine")
+                print("2. Night p.m routine")
+                routine_input = input("Enter 1 or 2\nYou: ").lower()
+                
+                if routine_input == "1" or routine_input == "one":
+                    routine_time = "a.m"
+                    break
+                elif routine_input == "2" or routine_input == "two":
+                    routine_time = "p.m"
+                    break
+                else:
+                    print("Please choose and answer with one of the number options listed.")
             
-            if routine_input == "1" or routine_input == "one":
-                routine_time = "a.m"
-            elif routine_input == "2" or "two":
-                routine_time = "p.m"
-            
-            context = {
-                "time": routine_time,
-                "skin_type": user_profile.skin_type,
-                "concerns": user_profile.concerns,
-                "goals": user_profile.goals
-            }
-            
-            routine_blueprint = build_routine(context)
-            print(f"Blueprint: {routine_blueprint}.")
+                context = {
+                    "time": routine_time,
+                    "skin_type": user_profile.skin_type,
+                    "concerns": user_profile.concerns,
+                    "goals": user_profile.goals
+                }
 
-            recommend_routine = []
-            for product_type in routine_blueprint:
-                products = recommend_for_product_type(product_type["category"], context, product_type["count"])
-                # extend recommend_routine with products while avoiding duplicates
-                recommend_routine.extend(products)
-            
-            user_profile.add_routine(recommend_routine, routine_time)
-            
-            print(f"\nBased on your profile, I recommend the following {routine_time} routine:\n")
-            for item in recommend_routine:
-                print(f"  . Product: {item['product']}")
-                print(f"  . Type: {item['type']}")
-                print(f"  . Reasoning: {item['reason']}\n")
-        
-            
-   
-        elif user_done in ["2", "two"]:
+                # build routine blueprint based on user profile and product rules
+                # blueprint determines how manny products of each type we should recommend based on user profile and product rules but does not specify which products yet
+                routine_blueprint = build_routine(context)
+                print(f"Blueprint: {routine_blueprint}.")
+
+                recommend_routine = []
+                for product_type in routine_blueprint:
+                    # for each product type in routine_blueprint get specific product recommendations
+                    products = recommend_for_product_type(product_type["category"], context, product_type["count"])
+                    # extend recommend_routine with products while avoiding duplicates
+                    recommend_routine.extend(products)
+                
+                user_profile.add_routine(recommend_routine, routine_time)
+                
+                print(f"\nBased on your profile, I recommend the following {routine_time} routine:\n")
+                for item in recommend_routine:
+                    print(f"  . Product: {item['product']}")
+                    print(f"  . Type: {item['type']}")
+                    print(f"  . Reasoning: {item['reason']}\n")
+                
+                # break after generating routine
+                break
+                
+        if user_done in ["2", "two"]:
             # adjust user skin type
             adjust_user_profile(user_profile, "skin_type")
             print(f"Bot: Updated skin type to {user_profile.skin_type}.")
