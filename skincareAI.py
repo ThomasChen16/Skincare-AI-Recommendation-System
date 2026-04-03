@@ -91,66 +91,178 @@ def adjust_user_profile(user_profile, aspect):
 # Refernces description for each skin type, concern, and goal to compare user input to for semantic similarity
 references_groups = {
     "skin_type": {
-        "oily": "oily greasy shiny excess oil production enlarge pores",
+        "oily": [
+            "My skin gets very oily and shiny throughout the day",
+            "I have greasy skin with visible large pores",
+            "My face produces excess oil especially in the T-zone",
+            "My skin feels slick and oily a few hours after washing",
+            "I struggle with oil buildup and shine on my face"
+        ],
 
-        "dry": "dry dehyrated flaky tight rough texture lacking moisture dryness",
+        "dry": [
+            "My skin feels dry, tight, and flaky",
+            "I have rough skin that lacks moisture",
+            "My face feels tight after washing and gets flaky",
+            "My skin is dehydrated and uncomfortable",
+            "I deal with dryness and peeling skin"
+        ],
 
-        "combination": "combination with t-zone shiny greasy forehead nose chin cheeks tight patchy uneven zones",
+        "combination": [
+            "My T-zone is oily but my cheeks are dry",
+            "I have combination skin with both oily and dry areas",
+            "My forehead and nose get shiny but cheeks feel tight",
+            "My skin has uneven oil distribution depending on area",
+            "Some parts of my face are oily while others are dry"
+        ],
 
-        "sensitive": "sensitive reactive irritated red easily inflamed",
+        "sensitive": [
+            "My skin is very sensitive and reacts easily",
+            "I get redness and irritation from products",
+            "My skin burns, stings, or becomes inflamed easily",
+            "I have reactive skin that gets irritated quickly",
+            "My skin is prone to redness and discomfort"
+        ],
 
-        "normal": "normal balanced healthy even comfortable"
+        "normal": [
+            "My skin is stable without major issues",
+            "I don’t experience much oiliness or dryness",
+            "My skin feels comfortable most of the time",
+            "I rarely have breakouts or irritation",
+            "My skin is generally consistent and balanced"
+        ]
     },
+
     "concerns": {
-        "acne": "acne pimples breakouts blemish clogged pores blackheads",
+        "acne": [
+            "I have acne and frequent breakouts",
+            "My skin gets pimples and clogged pores",
+            "I struggle with blackheads and whiteheads",
+            "I get recurring breakouts and blemishes",
+            "My pores get clogged and cause acne"
+        ],
 
-        "aging": "aging wrinkles fine lines sagging firmness elasticity crow's feet",
+        "aging": [
+            "I am concerned about aging and wrinkles",
+            "I have fine lines and loss of firmness",
+            "My skin is starting to sag and lose elasticity",
+            "I want to reduce wrinkles and signs of aging",
+            "My skin looks older with visible lines"
+        ],
 
-        "sensitivity": "sensitive redness irritation reactive burning itching inflamed rosacea",
+        "sensitivity": [
+            "My skin gets red and irritated easily",
+            "I experience inflammation and skin reactions",
+            "My skin is easily triggered by products or weather",
+            "I deal with redness and skin irritation often",
+            "My skin feels inflamed and reactive"
+        ],
 
-        "sun protection": "sun uv sunburn spf photoaging sun damage rays",
-        
-        "hydration": "dry dehydrated tight flaky moisture barrier plump",
-        
-        "brightening": "dull uneven dark spots hyperpigmentation glow discoloration melasma"
+        "dehydration": [
+            "My skin feels dehydrated and tight",
+            "I lack moisture and my skin looks dull",
+            "My skin feels dry even when it produces oil",
+            "I have water loss and my skin lacks hydration",
+            "My skin looks dull and feels tight from dehydration"
+        ],
+
+        "hyperpigmentation": [
+            "I have dark spots and uneven skin tone",
+            "My skin has discoloration and pigmentation",
+            "I want to reduce dark marks and patches",
+            "I deal with melasma or post-acne marks",
+            "My skin tone is uneven with visible spots"
+        ],
+
+        "sun_damage": [
+            "I am worried about sun damage and UV exposure",
+            "My skin gets sunburned easily",
+            "I want to prevent photoaging from the sun",
+            "My skin shows signs of sun damage",
+            "I need protection from UV rays"
+        ]
     },
+
     "goals": {
-        "clear_skin": "clear smooth clean blemish-free fewer breakouts refined",
+        "clear_skin": [
+            "I want clear skin without breakouts",
+            "My goal is to reduce acne and blemishes",
+            "I want smoother skin with fewer pimples",
+            "I want to prevent clogged pores and breakouts",
+            "I want clean and acne-free skin"
+        ],
 
-        "anti_aging": "youthful wrinkle-free firm plump reduce aging lines",
+        "anti_aging": [
+            "I want to reduce wrinkles and fine lines",
+            "My goal is firmer and more youthful skin",
+            "I want to improve elasticity and firmness",
+            "I want to slow down signs of aging",
+            "I want smoother skin with fewer lines"
+        ],
 
-        "hydration": "hydrated moisturized dewy soft plump moisture barrier",
+        "hydration": [
+            "I want hydrated and moisturized skin",
+            "My goal is soft, plump, and dewy skin",
+            "I want to improve my skin’s moisture levels",
+            "I want to fix dryness and dehydration",
+            "I want my skin to feel soft and hydrated"
+        ],
 
-        "protection": "protect shield uv sun damage pollution prevention",
+        "protection": [
+            "I want to protect my skin from damage",
+            "My goal is to prevent sun and environmental damage",
+            "I want to shield my skin from UV rays",
+            "I want to strengthen my skin barrier",
+            "I want long-term skin protection"
+        ],
 
-        "soothe": "calm soothe reduce redness irritation comfort sensitive",
-        
-        "brighten": "bright radiant glow even tone luminous dark spots fade"
+        "soothe": [
+            "I want to calm my skin and reduce irritation",
+            "My goal is to reduce redness and inflammation",
+            "I want to soothe sensitive and reactive skin",
+            "I want my skin to feel less irritated",
+            "I want to reduce discomfort and redness"
+        ],
+
+        "brighten": [
+            "I want brighter and more radiant skin",
+            "My goal is to even out my skin tone",
+            "I want to reduce dullness and improve glow",
+            "I want to fade dark spots and discoloration",
+            "I want glowing and luminous skin"
+        ]
     }
 }
 
-reference_embeddings = {
-    category: {
-        label: model.encode(text)
-        for label, text in descriptions.items()
-    }
-    for category, descriptions in references_groups.items()
-}
+reference_embeddings = {}
+
+# create reference embedding for each skin type, concern, and goal by averaging the embeddings of the reference descriptions for each label in the category
+for group, labels in references_groups.items():
+    # create empty dictionary for each group
+    reference_embeddings[group] = {}
+    
+    # loop through each label and reference text in the group and create embedding for the reference text and store in reference_embedding dictionary
+    for label, ref_text in labels.items():
+        # if ref_text is a list we take the average of the embeddings for the list of reference text to get one embedding for the label
+        if isinstance(ref_text, list):
+            embeddings = model.encode(ref_text)
+            reference_embeddings[group][label] = embeddings.mean(axis=0)
+        # already one embedding
+        else:
+            reference_embeddings[group][label] = model.encode(ref_text)
+    
 
 configuration = {
     "skin_type": {"min_similarity": 0.45, "top_k": 1},
-    "concerns": {"min_similarity": 0.35, "top_k": 3},
-    "goals": {"min_similarity": 0.3, "top_k": 3}
+    "concerns": {"min_similarity": 0.4, "top_k": 3},
+    "goals": {"min_similarity": 0.35,"top_k": 3}
 }
 
 # function to extract semantics from user input and compare to reference embedding to determine if similar scores above threshold and return top number of labels based on top_k
 def extract_semantics(text, category, debug=False):
     # embed user text
     user_emb = model.encode(text)
-    
     # determine category contiguration
     config = configuration[category]
-    
     # obtain reference embeddings for category
     ref_emb = reference_embeddings[category]
     
@@ -161,25 +273,27 @@ def extract_semantics(text, category, debug=False):
     for label, references_text in ref_emb.items():
         scores[label] = util.cos_sim(user_emb, references_text).item()
         
-        
-    
     # sort label by similarity score (highest to lowest)
     sorted_labels = sorted(scores.items(), key=lambda x: x[1], reverse=True)
+    
     
     # debuging to see rank, label, similarity score, and if passed threshold
     if debug:
         print(f"\n === Debug: {category} ===")
         for rank, (label, score) in enumerate(sorted_labels, start=1):
-            print(f"Rank: {rank}, Label: {label}, Similarity Score: {scores[label]}, Passed Threshold: {scores[label] >= config["min_similarity"]}")
+            print(f"Rank: {rank}, Label: {label}, Similarity Score: {scores[label]}, Passed Threshold: {scores[label] >= config['min_similarity']}")
+    
+          
+    top_sorted_labels = sorted_labels[:config["top_k"]]
             
     # filter if similarity score is above min_similarity threshold
     # return up to top_k results that passed threshold
-    detected = [
-        label for label,score in sorted_labels
+    result = [
+        label for label,score in top_sorted_labels
             if score >= config["min_similarity"]
-        ][:config["top_k"]]
+        ]
 
-    return detected
+    return result
     
 # ==================== ML Semantics END ====================
 
@@ -503,6 +617,7 @@ def have_conversation():
                     user_data = existing_data["users"][unique_id_input]
                     user_profile = UserProfile()
                     user_profile.unique_id = unique_id_input
+                    user_profile.name = user_data.get("name")
                     user_profile.add_skin_type(user_data.get("skin_type"))
                     for concern in user_data.get("concerns", []):
                         user_profile.add_concern(concern)
@@ -608,7 +723,7 @@ def have_conversation():
                     missing_info_attempts = 0 
                 
         elif question[1] == "concerns":
-            concerns = extract_semantics(user_input, "concerns")
+            concerns = extract_semantics(user_input, "concerns", debug=True)
             for item in concerns:
                 user_profile.add_concern(item)
             while not user_profile.concerns:
