@@ -54,7 +54,7 @@ class UserProfile:
            self.am_routine = routine
         elif time == "p.m":
             self.pm_routine = routine
-    
+        
 
 # Function to determine what to ask next based on missing info one at a time in user profile
 def what_to_ask_next(user_profile):
@@ -75,26 +75,22 @@ def adjust_user_profile(user_profile, aspect):
 
     # skintype easily updated as its one label
     if aspect == "skin_type":
-        user_profile.add_skin_type(extract_all_skin_type_semantics(user_input))
+        user_profile.add_skin_type(extract_semantics(user_input, "skin_type"))
     # update = True to handle new user input as override of previous info instead of appending to it
     elif aspect == "concerns":
-        concerns = extract_all_concerns_semantics(user_input)
+        concerns = extract_semantics(user_input, "concerns")
         for item in concerns:
             user_profile.add_concern(item, update=True)
     elif aspect == "goals":
-        goals = extract_all_goals_semantics(user_input)
+        goals = extract_semantics(user_input, "goals")
         for item in goals:
             user_profile.add_goal(item, update=True)
 
 # ==================== ML Semantics ====================
 
-def extract_all_skin_type_semantics(text, min_similarity=0.35):
-        
-    # embed user text
-    user_emb = model.encode(text)
-    
-    # Semantic comparsion between user text and reference descriptions for each skin type
-    references = {
+# Refernces description for each skin type, concern, and goal to compare user input to for semantic similarity
+references_groups = {
+    "skin_type": {
         "oily": "oily greasy shiny excess oil production enlarge pores",
 
         "dry": "dry dehyrated flaky tight rough texture lacking moisture dryness",
@@ -104,32 +100,8 @@ def extract_all_skin_type_semantics(text, min_similarity=0.35):
         "sensitive": "sensitive reactive irritated red easily inflamed",
 
         "normal": "normal balanced healthy even comfortable"
-    }
-
-    
-    # detected_types
-    scores = []
-    
-    for label, references_text in references.items():
-        # embed reference text
-        ref_emb = model.encode(references_text)
-        similarity = util.cos_sim(user_emb, ref_emb).item()
-        scores.append((label, similarity))
-    
-    # sort scores by similarity (1.0 is most similar, )
-    scores.sort(key=lambda x: x[1], reverse=True)
-    
-    best_score = scores[0][1]
-    
-    if best_score < min_similarity:
-        return []
-    else: 
-        return scores[0][0]
-
-def extract_all_concerns_semantics(text, min_similarity=0.35, top_k=3):
-    user_emb = model.encode(text)
-    
-    references = {
+    },
+    "concerns": {
         "acne": "acne pimples breakouts blemish clogged pores blackheads",
 
         "aging": "aging wrinkles fine lines sagging firmness elasticity crow's feet",
@@ -141,34 +113,8 @@ def extract_all_concerns_semantics(text, min_similarity=0.35, top_k=3):
         "hydration": "dry dehydrated tight flaky moisture barrier plump",
         
         "brightening": "dull uneven dark spots hyperpigmentation glow discoloration melasma"
-    }
-    
-    raw_scores = {}
-    
-    # calculate similarity score between reference text and user text
-    # raw_scores[label] = similarity score
-    for label, references_text in references.items():
-        ref_emb = model.encode(references_text)
-        raw_scores[label] = util.cos_sim(user_emb, ref_emb).item()
-        
-    # sort labels by similarity score (highest to lowest)
-    sorted_labels = sorted(raw_scores, key=raw_scores.get, reveresd=True)
-    
-    detected = []
-    # filer if similarity score is above min_similarity threshold and top_k?
-    for label, score in sorted_labels:
-        if score >= min_similarity:
-            detected.append(label)
-            
-    # return top 3 most similar labels 
-    return detected[:top_k]
-        
-       
-    
-def extract_all_goals_semantics(text, min_similarity=0.35, top_k=3):
-    user_emb = model.encode(text)
-    
-    references = {
+    },
+    "goals": {
         "clear_skin": "clear smooth clean blemish-free fewer breakouts refined",
 
         "anti_aging": "youthful wrinkle-free firm plump reduce aging lines",
@@ -181,27 +127,60 @@ def extract_all_goals_semantics(text, min_similarity=0.35, top_k=3):
         
         "brighten": "bright radiant glow even tone luminous dark spots fade"
     }
-    raw_scores = {}
+}
+
+reference_embeddings = {
+    category: {
+        label: model.encode(text)
+        for label, text in descriptions.items()
+    }
+    for category, descriptions in references_groups.items()
+}
+
+configuration = {
+    "skin_type": {"min_similarity": 0.45, "top_k": 1},
+    "concerns": {"min_similarity": 0.35, "top_k": 3},
+    "goals": {"min_similarity": 0.3, "top_k": 3}
+}
+
+# function to extract semantics from user input and compare to reference embedding to determine if similar scores above threshold and return top number of labels based on top_k
+def extract_semantics(text, category, debug=False):
+    # embed user text
+    user_emb = model.encode(text)
+    
+    # determine category contiguration
+    config = configuration[category]
+    
+    # obtain reference embeddings for category
+    ref_emb = reference_embeddings[category]
+    
+    # detected_labels
+    scores = {}
     
     # calculate similarity score between reference text and user text
-    # raw_scores[label] = similarity score
-    for label, references_text in references.items():
-        ref_emb = model.encode(references_text)
-        raw_scores[label] = util.cos_sim(user_emb, ref_emb).item()
+    for label, references_text in ref_emb.items():
+        scores[label] = util.cos_sim(user_emb, references_text).item()
         
-    # sort labels by similarity score (highest to lowest)
-    sorted_labels = sorted(raw_scores, key=raw_scores.get, reveresd=True)
+        
     
-    detected = []
-    # filer if similarity score is above min_similarity threshold and top_k?
-    for label, score in sorted_labels:
-        if score >= min_similarity:
-            detected.append(label)
+    # sort label by similarity score (highest to lowest)
+    sorted_labels = sorted(scores.items(), key=lambda x: x[1], reverse=True)
+    
+    # debuging to see rank, label, similarity score, and if passed threshold
+    if debug:
+        print(f"\n === Debug: {category} ===")
+        for rank, (label, score) in enumerate(sorted_labels, start=1):
+            print(f"Rank: {rank}, Label: {label}, Similarity Score: {scores[label]}, Passed Threshold: {scores[label] >= config["min_similarity"]}")
             
-    # return top 3 most similar labels 
-    return detected[:top_k]
+    # filter if similarity score is above min_similarity threshold
+    # return up to top_k results that passed threshold
+    detected = [
+        label for label,score in sorted_labels
+            if score >= config["min_similarity"]
+        ][:config["top_k"]]
 
-
+    return detected
+    
 # ==================== ML Semantics END ====================
 
 # ======================== PLANING =========================
@@ -608,14 +587,14 @@ def have_conversation():
         
         # Determine what question was asked based on what_to_ask_next() output and extract user input and update user profile
         if question[1] == "skin_type":
-            user_profile.add_skin_type(extract_all_skin_type_semantics(user_input))
+            user_profile.add_skin_type(extract_semantics(user_input, "skin_type"))
             
             while not user_profile.skin_type:
                 # follow up question if couldn't detect skin type from user input
                 print("Bot: I couldn't quite detect your skin type from that. Can you tell me more about your skin? For example, is it oily, dry, or a mix of both?")
                 user_input = input("You: ")
                 print()
-                user_profile.add_skin_type(extract_all_skin_type_semantics(user_input))
+                user_profile.add_skin_type(extract_semantics(user_input, "skin_type"))
                 if not user_profile.skin_type:
                     missing_info_attempts += 1
                 if missing_info_attempts >= 3:
@@ -629,14 +608,14 @@ def have_conversation():
                     missing_info_attempts = 0 
                 
         elif question[1] == "concerns":
-            concerns = extract_all_concerns_semantics(user_input)
+            concerns = extract_semantics(user_input, "concerns")
             for item in concerns:
                 user_profile.add_concern(item)
             while not user_profile.concerns:
                 print("Can you tell me more about specific skin concerns are you hoping to address? For example, would it be acne, aging, sensitivity, or something else?")
                 user_input = input("You: ")
                 print()
-                concerns = extract_all_concerns_semantics(user_input)
+                concerns = extract_semantics(user_input, "concerns")
                 for item in concerns:
                     user_profile.add_concern(item)
                 if not user_profile.concerns:
@@ -650,14 +629,14 @@ def have_conversation():
                     # reset attempts when done
                     missing_info_attempts = 0
         elif question[1] == "goals":
-            goals = extract_all_goals_semantics(user_input)
+            goals = extract_semantics(user_input, "goals")
             for item in goals:
                 user_profile.add_goal(item)
             while not user_profile.goals:
                 print("Can you tell me more about your main skincare goals? Do you hope to improve hydration, reduce wrinkles, or something else?")
                 user_input = input("You: ")
                 print()
-                goals = extract_all_goals_semantics(user_input)
+                goals = extract_semantics(user_input, "goals")
                 for item in goals:
                     user_profile.add_goal(item)
                 if not user_profile.goals:
