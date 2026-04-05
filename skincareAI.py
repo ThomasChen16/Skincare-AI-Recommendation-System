@@ -26,14 +26,15 @@ class UserProfile:
     def __init__(self):
         self.unique_id = 0
         self.name = None
-        self.skin_type = None
+        self.skin_type = []
         self.concerns = []
         self.goals = []
         self.am_routine = []
         self.pm_routine = []
     
     
-    def add_skin_type(self, skin_type):
+    def add_skin_type(self, skin_type, update=False):
+        # update unused for now, just to prevent TypeError
         self.skin_type = skin_type
     
     def add_concern(self, concern, update=False):
@@ -71,20 +72,30 @@ def adjust_user_profile(user_profile, aspect):
     # update user profile based on aspect (skin type, concerns, goals) and new user input
     print(f"Bot: Let's adjust your {aspect}. Please provide the updated information.")
     user_input = input("You: ")
+    print(f"DEBUG: Raw input = '{user_input}'")
     print()
 
     # skintype easily updated as its one label
     if aspect == "skin_type":
-        user_profile.add_skin_type(extract_semantics(user_input, "skin_type"))
+        user_profile.add_skin_type(extract_semantics(user_input, "skin_type", debug=True))
+        
+        # follow up questions if user input doesn't give enough info
+        retry_extract(user_profile, "skin_type", "I couldn't quite detect your skin type from that. Can you tell me more about your skin? For example, is it oily, dry, or a mix of both?", user_profile.add_skin_type)
     # update = True to handle new user input as override of previous info instead of appending to it
     elif aspect == "concerns":
         concerns = extract_semantics(user_input, "concerns")
         for item in concerns:
             user_profile.add_concern(item, update=True)
+        
+        # follow up questions if user input doesn't give enough info
+        retry_extract(user_profile, "concerns", "Can you tell me more about specific skin concerns are you hoping to address? For example, would it be acne, aging, sensitivity, or something else?", user_profile.add_concern, update=True)
     elif aspect == "goals":
         goals = extract_semantics(user_input, "goals")
         for item in goals:
             user_profile.add_goal(item, update=True)
+        
+        # follow up questions if user input doesn't give enough info
+        retry_extract(user_profile, "goals", "Can you tell me more about your main skincare goals? Do you hope to improve hydration, reduce wrinkles, or something else?", user_profile.add_goal, update=True)
 
 # ==================== ML Semantics ====================
 
@@ -249,24 +260,23 @@ for group, labels in references_groups.items():
         # already one embedding
         else:
             reference_embeddings[group][label] = model.encode(ref_text)
-    
 
 configuration = {
     "skin_type": {"min_similarity": 0.45, "top_k": 1},
-    "concerns": {"min_similarity": 0.4, "top_k": 3},
-    "goals": {"min_similarity": 0.35,"top_k": 3}
+    "concerns": {"min_similarity": 0.425, "top_k": 3},
+    "goals": {"min_similarity": 0.375,"top_k": 3}
 }
 
 # function to extract semantics from user input and compare to reference embedding to determine if similar scores above threshold and return top number of labels based on top_k
 def extract_semantics(text, category, debug=False):
     # embed user text
-    user_emb = model.encode(text)
+    user_emb = model.encode(text, convert_to_tensor=True)
     # determine category contiguration
     config = configuration[category]
     # obtain reference embeddings for category
     ref_emb = reference_embeddings[category]
     
-    # detected_labels
+    # detected labels candidates
     scores = {}
     
     # calculate similarity score between reference text and user text
@@ -276,19 +286,39 @@ def extract_semantics(text, category, debug=False):
     # sort label by similarity score (highest to lowest)
     sorted_labels = sorted(scores.items(), key=lambda x: x[1], reverse=True)
     
-    
     # debuging to see rank, label, similarity score, and if passed threshold
     if debug:
         print(f"\n === Debug: {category} ===")
         for rank, (label, score) in enumerate(sorted_labels, start=1):
             print(f"Rank: {rank}, Label: {label}, Similarity Score: {scores[label]}, Passed Threshold: {scores[label] >= config['min_similarity']}")
     
-          
+    # get top_k candidates      
     top_sorted_labels = sorted_labels[:config["top_k"]]
+    
+    result = []
             
     # filter if similarity score is above min_similarity threshold
     # return up to top_k results that passed threshold
-    result = [
+    if config["top_k"] == 1:
+        # Single-label skin_type
+        top_score = sorted_labels[0][1]
+        second_score = sorted_labels[1][1]
+        
+        # difference between top two scores
+        # if top two scores too similar is sign of hallucination
+        confidence_gap = top_score - second_score
+        if top_score < config["min_similarity"]:
+            result = []
+        elif top_score >= 0.75:
+            result = [top_sorted_labels[0][0]]
+        elif confidence_gap > 0.05:
+            result = [top_sorted_labels[0][0]]
+        else:
+            result = []
+        
+    else:
+        # Multi label concerns and goals
+        result = [
         label for label,score in top_sorted_labels
             if score >= config["min_similarity"]
         ]
@@ -585,6 +615,35 @@ def generate_reasoning(info, context):
 # ================= PRODUCT RECOMMENDATIONS END =================
 # ============ CONVERSATION AND PROFILE MANAGEMENT ===============
 
+# Retry function for followup question if couldn't detect skin type, concern, or goal
+def retry_extract(user_profile, category, followup_message, add_function, update=False):
+    # attempt counter for missing info to determine how many times we ask follow up questions
+    # 3 attempts
+    missing_info_attempts = 1
+    
+    # while attribute is empty
+    while not getattr(user_profile, category):
+        print(followup_message)
+        user_input = input("You: ")
+        print()
+        
+        labels = extract_semantics(user_input, category, debug=True)
+            
+        print(f"DEBUG retry_extract: labels after conversion = {labels}")
+            
+        for label in labels:
+            print(f"DEBUG retry_extract: adding label '{label}'")
+            add_function(label, update)
+        # if the user followup input is still doesn't provide necessary data we count that another re-attempt and try again
+        if not getattr(user_profile, category):
+            missing_info_attempts += 1
+        if missing_info_attempts >= 3:
+            print("Bot: No worries, we can move on with the information we have and adjust later if needed.")
+            # default value
+            add_function("general", update)
+            break
+    
+
 # Main Conservation Function Loop
 def have_conversation():
     print("Welcome to the Skincare AI Consultant!\n")
@@ -648,10 +707,11 @@ def have_conversation():
         elif existing_profile.startswith("no") or existing_profile == "n":
             print("No problem! Let's create a new profile for you.\n")
             login_status = True
+            # create user profile
+            user_profile = UserProfile()
         else:
             print("Please answer with yes or no.")
     
-    number = 1
     user_done = ""
     
     if existing_profile.startswith("no") or existing_profile == "n":
@@ -693,73 +753,25 @@ def have_conversation():
         user_input = input("You: ")
         print() # new line for readability
         
-        # attempt counter for missing info to determine how many times we ask follow up question before we move on (3 attempts)
-        missing_info_attempts = 0
-        
         # Determine what question was asked based on what_to_ask_next() output and extract user input and update user profile
         if question[1] == "skin_type":
-            user_profile.add_skin_type(extract_semantics(user_input, "skin_type"))
-            
-            while not user_profile.skin_type:
-                # follow up question if couldn't detect skin type from user input
-                print("Bot: I couldn't quite detect your skin type from that. Can you tell me more about your skin? For example, is it oily, dry, or a mix of both?")
-                user_input = input("You: ")
-                print()
-                user_profile.add_skin_type(extract_semantics(user_input, "skin_type"))
-                if not user_profile.skin_type:
-                    missing_info_attempts += 1
-                if missing_info_attempts >= 3:
-                    # reset missing_info_attempts after done so it can be used for other missing info if needed
-                    missing_info_attempts = 0
-                    print("Bot: No worries, we can move on with the information we have and adjust later if needed.")
-                    user_profile.add_skin_type("general") # default
-                    break
-                if user_profile.skin_type:
-                    # reset attempts if we do detect skin type so it can be used for other missing info if needed
-                    missing_info_attempts = 0 
+            user_profile.add_skin_type(extract_semantics(user_input, "skin_type", debug=True))
+            # follow up questions if user input doesn't give enough info
+            retry_extract(user_profile, "skin_type", "I couldn't quite detect your skin type from that. Can you tell me more about your skin? For example, is it oily, dry, or a mix of both?", user_profile.add_skin_type)
                 
         elif question[1] == "concerns":
-            concerns = extract_semantics(user_input, "concerns", debug=True)
+            concerns = extract_semantics(user_input, "concerns")
             for item in concerns:
                 user_profile.add_concern(item)
-            while not user_profile.concerns:
-                print("Can you tell me more about specific skin concerns are you hoping to address? For example, would it be acne, aging, sensitivity, or something else?")
-                user_input = input("You: ")
-                print()
-                concerns = extract_semantics(user_input, "concerns")
-                for item in concerns:
-                    user_profile.add_concern(item)
-                if not user_profile.concerns:
-                    missing_info_attempts += 1
-                if missing_info_attempts >= 3:
-                    missing_info_attempts = 0
-                    print("Bot: No worries, we can move on with the information we have and adjust later if needed.")
-                    user_profile.add_concern("general") # default
-                    break
-                if user_profile.concerns:
-                    # reset attempts when done
-                    missing_info_attempts = 0
+            # follow up questions if user input doesn't give enough info
+            retry_extract(user_profile, "concerns", "Can you tell me more about specific skin concerns are you hoping to address? For example, would it be acne, aging, sensitivity, or something else?", user_profile.add_concern)
+        
         elif question[1] == "goals":
             goals = extract_semantics(user_input, "goals")
             for item in goals:
                 user_profile.add_goal(item)
-            while not user_profile.goals:
-                print("Can you tell me more about your main skincare goals? Do you hope to improve hydration, reduce wrinkles, or something else?")
-                user_input = input("You: ")
-                print()
-                goals = extract_semantics(user_input, "goals")
-                for item in goals:
-                    user_profile.add_goal(item)
-                if not user_profile.goals:
-                    missing_info_attempts += 1
-                if missing_info_attempts >= 3:
-                    missing_info_attempts = 0
-                    print("Bot: No worries, we can move on with the information we have and adjust later if needed.")
-                    user_profile.add_goal("general") # default
-                    break
-                if user_profile.goals:
-                    # reset attempts when done
-                    missing_info_attempts = 0
+            # follow up questions if user input doesn't give enough info
+            retry_extract(user_profile, "goals", "Can you tell me more about your main skincare goals? Do you hope to improve hydration, reduce wrinkles, or something else?", user_profile.add_goal)
                 
     # Re-adjustsment and Routine Loop    
     while True:
@@ -790,7 +802,7 @@ def have_conversation():
                     routine_time = "p.m"
                     break
                 else:
-                    print("Please choose and answer with one of the number options listed.")
+                    print("\nPlease choose and answer with one of the number options listed.")
             
                 context = {
                     "time": routine_time,
