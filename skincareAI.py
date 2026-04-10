@@ -87,6 +87,7 @@ def adjust_user_profile(user_profile, aspect):
         for item in concerns:
             user_profile.add_concern(item, update=True)
         
+        
         # follow up questions if user input doesn't give enough info
         retry_extract(user_profile, "concerns", "Can you tell me more about specific skin concerns are you hoping to address? For example, would it be acne, aging, sensitivity, or something else?", user_profile.add_concern, update=True)
     elif aspect == "goals":
@@ -260,6 +261,8 @@ for group, labels in references_groups.items():
         # already one embedding
         else:
             reference_embeddings[group][label] = model.encode(ref_text)
+    
+        
 
 configuration = {
     "skin_type": {"min_similarity": 0.45, "top_k": 1},
@@ -267,10 +270,122 @@ configuration = {
     "goals": {"min_similarity": 0.375,"top_k": 3}
 }
 
-# function to extract semantics from user input and compare to reference embedding to determine if similar scores above threshold and return top number of labels based on top_k
+# normalize text 
+def normalize(text):
+    # undercase and remove whitespaces in front and back
+    return text.lower().strip()
+
+# Make user input longer when input is short
+def enrich_input(text, category):
+    if len(text.split()) <= 2:
+        if category == "skin_type":
+            return f"My skin type is {text}"
+    return text
+
+# Filter skin type labels
+def decide_skin_type(sorted_labels, config):
+    top_label, top_score = sorted_labels[0][0], sorted_labels[0][1] 
+    second_score = sorted_labels[1][1] if len(sorted_labels) > 1 else 0
+    
+    # gap between the top and second score
+    confidence_gap = top_score - second_score
+    
+    # if top score is below threshold return empty, if top score above 0.75 return top label, if confidence gap above 0.05 return top label else return empty
+    if top_score < config["min_similarity"]:
+        return []
+    elif top_score >= 0.75:
+        return [top_label]
+    elif confidence_gap >= 0.05:
+        return [top_label]
+    
+    return []
+
+# Filter concerns and goals labels
+def decide_multi(sorted_labels, config):
+    top_score = sorted_labels[0][1]
+    results = []
+    
+    # for label and score in sorted labels if score above threshold and score to top score ratio is not too low then add to results
+    for label, score in sorted_labels:
+        if score < config["min_similarity"]:
+            continue
+        # if score and top_score ratio too big do not add
+        if score / top_score < 0.6:
+            break
+        
+        results.append(label)
+        
+    return results[:config["top_k"]]
+
+# split text by separators and return list of stripped parts
+def split_input(text):
+    separators = [",", "and", "&"]
+    
+    parts = [text]
+    
+    for sep in separators:
+        new_parts = []
+        for p in parts:
+            new_parts.extend(p.split(sep))
+        parts = new_parts
+        
+    return [p.strip() for p in parts if p.strip()]
+
+# function to handle multi input extraction
+def extract_multi_input(text, category, debug):
+    # split text
+    parts = split_input(text)
+    
+    label_scores = defaultdict(list)
+    
+    # for each part extract semanatics and extend results to all_result
+    for part in parts:
+        results = retrieve_candidates(part, category, debug=debug)
+        
+        for label, score in results.items():
+            label_scores[label].append(score)
+    
+    # aggregate holds the final score for each label
+    aggregated = {}
+    # for each label take the max score across the different parts as the final score for that label and append to aggregated
+    for label, scores in label_scores.items():
+        aggregated[label] = max(scores)
+        
+    # sort by score
+    aggregated = sorted(aggregated.items(), key=lambda x: x[1], reverse=True)
+        
+    return aggregated
+    
+
+# function to determine which extraction method to use and then call deciding function to filter result based on category
 def extract_semantics(text, category, debug=False):
+    config = configuration[category]
+    
+    # multi label input if separator and category is concerns or goals
+    if any(sep in text for sep in [",", "and", "&"]) and category in ["concerns", "goals"]:
+        sorted_labels =  extract_multi_input(text, category, debug=debug)
+    else:
+    # single label input
+        sorted_labels = retrieve_candidates(text, category, debug=debug)
+    
+    if category == "skin_type":
+        return decide_skin_type(sorted_labels, config)
+    else:
+        return decide_multi(sorted_labels, config)
+    
+
+    
+# function to retrive embeddings for user input and reference text and calculate similarity score to determine label candidates
+def retrieve_candidates(text, category, debug=False):
+    # clean text
+    text = normalize(text)
+    
+    # enrich short text
+    text = enrich_input(text, category)
+    
     # embed user text
     user_emb = model.encode(text, convert_to_tensor=True)
+    
     # determine category contiguration
     config = configuration[category]
     # obtain reference embeddings for category
@@ -283,7 +398,8 @@ def extract_semantics(text, category, debug=False):
     for label, references_text in ref_emb.items():
         scores[label] = util.cos_sim(user_emb, references_text).item()
         
-    # sort label by similarity score (highest to lowest)
+    sorted_labels = {}
+    # sort labels by similarity score
     sorted_labels = sorted(scores.items(), key=lambda x: x[1], reverse=True)
     
     # debuging to see rank, label, similarity score, and if passed threshold
@@ -292,38 +408,9 @@ def extract_semantics(text, category, debug=False):
         for rank, (label, score) in enumerate(sorted_labels, start=1):
             print(f"Rank: {rank}, Label: {label}, Similarity Score: {scores[label]}, Passed Threshold: {scores[label] >= config['min_similarity']}")
     
-    # get top_k candidates      
-    top_sorted_labels = sorted_labels[:config["top_k"]]
+    # return [(label, score)]
+    return sorted_labels
     
-    result = []
-            
-    # filter if similarity score is above min_similarity threshold
-    # return up to top_k results that passed threshold
-    if config["top_k"] == 1:
-        # Single-label skin_type
-        top_score = sorted_labels[0][1]
-        second_score = sorted_labels[1][1]
-        
-        # difference between top two scores
-        # if top two scores too similar is sign of hallucination
-        confidence_gap = top_score - second_score
-        if top_score < config["min_similarity"]:
-            result = []
-        elif top_score >= 0.75:
-            result = [top_sorted_labels[0][0]]
-        elif confidence_gap > 0.05:
-            result = [top_sorted_labels[0][0]]
-        else:
-            result = []
-        
-    else:
-        # Multi label concerns and goals
-        result = [
-        label for label,score in top_sorted_labels
-            if score >= config["min_similarity"]
-        ]
-
-    return result
     
 # ==================== ML Semantics END ====================
 
@@ -532,7 +619,7 @@ Product_Info = {
     }
 }
 
-
+# function to recommend products for a given product type category 
 def recommend_for_product_type(category, context, count = 1):
     # Fill one product type at a time based on the routine blueprint and product rules
     candiates = []
@@ -560,8 +647,8 @@ def recommend_for_product_type(category, context, count = 1):
         
     return results
 
+# function to calculate coverage score for how well a product addresss the user's skin type, concerns, and goals based on Product_Info and user profile
 def calculate_coverage(product, context):
-    # Calculate how well a product addresses the user's skin type, concerns, and goals based on Product_Info and user profile
     score = 0
     # skin type match is most important 
     if context["skin_type"] in product["skin_types_addressed"]:
@@ -592,20 +679,20 @@ def generate_reasoning(info, context):
     if context["skin_type"] in info["skin_types_addressed"]:
         reasoning.append(f"Addresses your skin type ({context['skin_type']}).")
     else:
-        reasoning.append(f"Not ideal for your skin type ({context['skin_type']}), but may still provide some benefits.")
+        reasoning.append(f"Not ideal for your skin type: {context['skin_type']}, but may still provide some benefits.")
     
     concern_matches = set(info["concerns_addressed"]) & set(context["concerns"])
     if concern_matches:
         reasoning.append(f"Targets your skin concerns: {', '.join(concern_matches)}.")
         reasoning.append(f"Specifically, {info['description']}")
     else:
-        reasoning.append("Does not directly target your specific concerns, but may still offer general skincare benefits.")
+        reasoning.append(f"Does not directly target your specific concerns: {','.join(context['concerns'])}, but may still offer general skincare benefits.")
     
     goal_matches = set(info["goals_addressed"]) & set(context["goals"])
     if goal_matches:
         reasoning.append(f"Helps you work towards your skincare goals: {', '.join(goal_matches)}.")
     else:
-        reasoning.append("May not directly align with your specific goals, but could still contribute to overall skin health.")
+        reasoning.append(f"May not directly align with your specific goals: {','.join(context['goals'])} but could still contribute to overall skin health.")
     
     return " ".join(reasoning)
 
@@ -631,7 +718,7 @@ def retry_extract(user_profile, category, followup_message, add_function, update
             
         print(f"DEBUG retry_extract: labels after conversion = {labels}")
             
-        for label in labels:
+        for label, score in labels:
             print(f"DEBUG retry_extract: adding label '{label}'")
             add_function(label, update)
         # if the user followup input is still doesn't provide necessary data we count that another re-attempt and try again
@@ -797,10 +884,8 @@ def have_conversation():
                 
                 if routine_input == "1" or routine_input == "one":
                     routine_time = "a.m"
-                    break
                 elif routine_input == "2" or routine_input == "two":
                     routine_time = "p.m"
-                    break
                 else:
                     print("\nPlease choose and answer with one of the number options listed.")
             
