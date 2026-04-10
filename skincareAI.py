@@ -2,6 +2,8 @@ from collections import Counter
 from shlex import join
 import random # random number generator
 import json # for saving userProfile data
+import faiss # for faster similarity search
+import numpy as np
 
 # read json file
 #with open("profile.json", "r") as f:
@@ -14,10 +16,25 @@ import json # for saving userProfile data
 #with open("profile.json", "w") as f:
 #    json.dump(data, f, index=4)
 
+# exit virtual environment: deactivate
+# re-enter virtual environment: venv\Scripts\activate
+# check to see if you are in the right environment: python -c "import sys; print(sys.executable)"
+
 from sentence_transformers import SentenceTransformer, util
 print("Loading AI model...")
 model = SentenceTransformer('all-MiniLM-L6-v2')
 print("Ready!\n")
+
+d = 4 # dimensions for FAISS
+index = faiss.IndexFlatL2(d) # build the index
+
+xb = np.random.random((5, d)).astype('float32') # example data
+index.add(xb)
+
+xq = np.random.random((1, d)).astype('float32') # example query
+D, I = index.search(xq, k=2)
+
+print(I)
 
 from collections import defaultdict # for product score and reasons (less if statements as keys are created on the go)
 
@@ -209,6 +226,7 @@ references_groups = {
             "I want to improve elasticity and firmness",
             "I want to slow down signs of aging",
             "I want smoother skin with fewer lines"
+            "I want my skin to look young again"
         ],
 
         "hydration": [
@@ -261,6 +279,20 @@ for group, labels in references_groups.items():
         # already one embedding
         else:
             reference_embeddings[group][label] = model.encode(ref_text)
+
+all_embeddings = []
+metadata = []
+
+# 1 embedding for each reference text
+# create metadata embeddings list to store the category and label for each embedding
+for category, labels in references_groups.items():
+    # loop through each label and text in the category and create embedding for the text
+    for label, texts in labels.items():
+        embs = model.encode(texts, convert_to_tensor=True)
+        # store each embedding in all_embeddings list and store its category and label in metadata
+        for emb in embs:
+            all_embeddings.append(emb.cpu().numpy())
+            metadata.append((category, label))
     
         
 
@@ -292,13 +324,13 @@ def decide_skin_type(sorted_labels, config):
     
     # if top score is below threshold return empty, if top score above 0.75 return top label, if confidence gap above 0.05 return top label else return empty
     if top_score < config["min_similarity"]:
-        return []
+        return ""
     elif top_score >= 0.75:
-        return [top_label]
+        return top_label
     elif confidence_gap >= 0.05:
-        return [top_label]
+        return top_label
     
-    return []
+    return ""
 
 # Filter concerns and goals labels
 def decide_multi(sorted_labels, config):
@@ -342,7 +374,7 @@ def extract_multi_input(text, category, debug):
     for part in parts:
         results = retrieve_candidates(part, category, debug=debug)
         
-        for label, score in results.items():
+        for label, score in results:
             label_scores[label].append(score)
     
     # aggregate holds the final score for each label
@@ -392,24 +424,23 @@ def retrieve_candidates(text, category, debug=False):
     ref_emb = reference_embeddings[category]
     
     # detected labels candidates
-    scores = {}
+    detected_labels = {}
     
     # calculate similarity score between reference text and user text
     for label, references_text in ref_emb.items():
-        scores[label] = util.cos_sim(user_emb, references_text).item()
+        detected_labels[label] = util.cos_sim(user_emb, references_text).item()
         
-    sorted_labels = {}
-    # sort labels by similarity score
-    sorted_labels = sorted(scores.items(), key=lambda x: x[1], reverse=True)
+    # sort scores by similarity score
+    detected_labels = sorted(detected_labels.items(), key=lambda x: x[1], reverse=True)
     
     # debuging to see rank, label, similarity score, and if passed threshold
     if debug:
         print(f"\n === Debug: {category} ===")
-        for rank, (label, score) in enumerate(sorted_labels, start=1):
-            print(f"Rank: {rank}, Label: {label}, Similarity Score: {scores[label]}, Passed Threshold: {scores[label] >= config['min_similarity']}")
+        for rank, (label, score) in enumerate(detected_labels, start=1):
+            print(f"Rank: {rank}, Label: {label}, Similarity Score: {score}, Passed Threshold: {score >= config['min_similarity']}")
     
     # return [(label, score)]
-    return sorted_labels
+    return detected_labels
     
     
 # ==================== ML Semantics END ====================
@@ -847,14 +878,14 @@ def have_conversation():
             retry_extract(user_profile, "skin_type", "I couldn't quite detect your skin type from that. Can you tell me more about your skin? For example, is it oily, dry, or a mix of both?", user_profile.add_skin_type)
                 
         elif question[1] == "concerns":
-            concerns = extract_semantics(user_input, "concerns")
+            concerns = extract_semantics(user_input, "concerns", debug=True)
             for item in concerns:
                 user_profile.add_concern(item)
             # follow up questions if user input doesn't give enough info
             retry_extract(user_profile, "concerns", "Can you tell me more about specific skin concerns are you hoping to address? For example, would it be acne, aging, sensitivity, or something else?", user_profile.add_concern)
         
         elif question[1] == "goals":
-            goals = extract_semantics(user_input, "goals")
+            goals = extract_semantics(user_input, "goals", debug=True)
             for item in goals:
                 user_profile.add_goal(item)
             # follow up questions if user input doesn't give enough info
