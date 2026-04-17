@@ -25,16 +25,6 @@ print("Loading AI model...")
 model = SentenceTransformer('all-MiniLM-L6-v2')
 print("Ready!\n")
 
-d = 4 # dimensions for FAISS
-index = faiss.IndexFlatL2(d) # build the index
-
-xb = np.random.random((5, d)).astype('float32') # example data
-index.add(xb)
-
-xq = np.random.random((1, d)).astype('float32') # example query
-D, I = index.search(xq, k=2)
-
-print(I)
 
 from collections import defaultdict # for product score and reasons (less if statements as keys are created on the go)
 
@@ -295,12 +285,38 @@ for category, labels in references_groups.items():
             metadata.append((category, label))
     
         
+xb = np.array(all_embeddings).astype("float32")
+
+# normalize for cosine similarity
+faiss.normalize_L2(xb)
+
+dim = xb.shape[1]
+
+# build the FAISS index and add the embeddings
+index = faiss.IndexFlatIP(dim)
+index.add(xb)
+
 
 configuration = {
-    "skin_type": {"min_similarity": 0.45, "top_k": 1},
-    "concerns": {"min_similarity": 0.425, "top_k": 3},
-    "goals": {"min_similarity": 0.375,"top_k": 3}
+    "skin_type": {"min_similarity": 0.6, "top_k": 1},
+    "concerns": {"min_similarity": 0.5, "top_k": 3},
+    "goals": {"min_similarity": 0.4,"top_k": 3}
 }
+
+# function to perform FAISS search for similar reference text to user input and return the scores and labels of the matches
+def faiss_search(text, top_k=20):
+    # embed the input text
+    user_emb = model.encode(text)
+    user_emb = np.array([user_emb]).astype("float32")
+    
+    # normalize the user embedding for cosine similarity
+    faiss.normalize_L2(user_emb)
+    
+    # search the index for the top_k most similar embeddings and return the scores and indices of the matches
+    scores, indices = index.search(user_emb, top_k)
+
+    # return the scores and indices of the matches
+    return scores[0], indices[0]    
 
 # normalize text 
 def normalize(text):
@@ -415,33 +431,40 @@ def retrieve_candidates(text, category, debug=False):
     # enrich short text
     text = enrich_input(text, category)
     
-    # embed user text
-    user_emb = model.encode(text, convert_to_tensor=True)
+    # retrieve score and indices of similar reference text using FAISS serach
+    scores, indices = faiss_search(text, top_k=30)
+    
+    # detected labels candidates
+    label_scores = {}
+    
+    # loop through scores and indices and get the category and label for each match from metadata
+    for scores, idx in zip(scores, indices):
+        group, label = metadata[idx]
+        
+        if group != category:
+            continue
+        
+        # take max score per label
+        if label not in label_scores:
+            label_scores[label] = scores
+        else:
+            label_scores[label] = max(label_scores[label], scores)
+    
+    # sort labels by scores in descending order  
+    sorted_labels = sorted(label_scores.items(), key=lambda x: x[1], reverse=True)
     
     # determine category contiguration
     config = configuration[category]
-    # obtain reference embeddings for category
-    ref_emb = reference_embeddings[category]
-    
-    # detected labels candidates
-    detected_labels = {}
-    
-    # calculate similarity score between reference text and user text
-    for label, references_text in ref_emb.items():
-        detected_labels[label] = util.cos_sim(user_emb, references_text).item()
-        
-    # sort scores by similarity score
-    detected_labels = sorted(detected_labels.items(), key=lambda x: x[1], reverse=True)
+
     
     # debuging to see rank, label, similarity score, and if passed threshold
     if debug:
         print(f"\n === Debug: {category} ===")
-        for rank, (label, score) in enumerate(detected_labels, start=1):
+        for rank, (label, score) in enumerate(sorted_labels, start=1):
             print(f"Rank: {rank}, Label: {label}, Similarity Score: {score}, Passed Threshold: {score >= config['min_similarity']}")
     
     # return [(label, score)]
-    return detected_labels
-    
+    return sorted_labels
     
 # ==================== ML Semantics END ====================
 
@@ -678,20 +701,27 @@ def recommend_for_product_type(category, context, count = 1):
         
     return results
 
+# Configuration based weight scores
+WEIGHTS = {
+    "skin_type": 3.0,
+    "concerns": 2.0,
+    "goals": 1.0
+}
+
 # function to calculate coverage score for how well a product addresss the user's skin type, concerns, and goals based on Product_Info and user profile
 def calculate_coverage(product, context):
     score = 0
     # skin type match is most important 
     if context["skin_type"] in product["skin_types_addressed"]:
-        score += 3
+        score += WEIGHTS["skin_type"]
     else:
-        score -= 2
+        score -= WEIGHTS["skin_type"] * 0.5 # penalize if skin type not address but still effective
     
     product_concerns = set(product["concerns_addressed"])
     user_concerns = set(context["concerns"])
     # intersection
     concern_matches = product_concerns & user_concerns
-    score += len(concern_matches) * 2
+    score += len(concern_matches) * WEIGHTS["concerns"]
     
     # find how many goals the product addressed that the user has
     product_goals = set(product["goals_addressed"])
@@ -699,7 +729,7 @@ def calculate_coverage(product, context):
     
     goal_matches = product_goals & user_goals
     # * 1 because goal match is less important than concern and skin type match
-    score += len(goal_matches) * 1
+    score += len(goal_matches) * WEIGHTS["goals"]
     
     
     return score
@@ -746,11 +776,11 @@ def retry_extract(user_profile, category, followup_message, add_function, update
         print()
         
         labels = extract_semantics(user_input, category, debug=True)
-            
-        print(f"DEBUG retry_extract: labels after conversion = {labels}")
-            
-        for label, score in labels:
-            print(f"DEBUG retry_extract: adding label '{label}'")
+        
+        # if category is skin type no need to loop and add directly
+        if category == "skin_type":
+            add_function(labels)
+        for label in labels:
             add_function(label, update)
         # if the user followup input is still doesn't provide necessary data we count that another re-attempt and try again
         if not getattr(user_profile, category):
