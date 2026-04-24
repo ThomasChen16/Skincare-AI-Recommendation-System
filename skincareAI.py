@@ -676,28 +676,39 @@ Product_Info = {
 # function to recommend products for a given product type category 
 def recommend_for_product_type(category, context, count = 1):
     # Fill one product type at a time based on the routine blueprint and product rules
-    candiates = []
+    candidates = []
     for product_name, product_details in Product_Info.items():
         if product_details["type"] == category:
-            candiates.append((product_name, product_details))
+            candidates.append((product_name, product_details))
     
     # calculate coverage score for each candidate product based on how well it addresses the user's skin type, concerns, and goals
     scored_candidates = []
-    for category_product_name, category_product_details in candiates:
+    for category_product_name, category_product_details in candidates:
         score = calculate_coverage(category_product_details, context)
-        scored_candidates.append((category_product_name, category_product_details, score))
-        
-    # sort candidates by score
-    scored_candidates.sort(key=lambda x: x[2], reverse=True)
+        scored_candidates.append({
+            "product": category_product_name,
+            "info": category_product_details,
+            "score": score
+        })
+    
+    
+    # covert scores to normalization (0.0 - 1.0)
+    scored_candidates = normalize_scores(scored_candidates)
+    
+    # sort candidates with new normalize score
+    scored_candidates.sort(key=lambda x: x["normalized_score"], reverse=True)
+    
+    
     results = []
     # [:count] to get top products based on count specified in Build Routine
-    for product, info, score in scored_candidates[:count]:
+    for product in scored_candidates[:count]:
         results.append({
-            "product": product,
-            "type": info["type"],
-            "score": score,
-            "reason": generate_reasoning(info, context)
+            "product": product["product"],
+            "type": product["info"]["type"],
+            "score": product["normalized_score"],
+            "reason": generate_reasoning(product["info"], context)
         })
+        print(product["product"], product["score"], product["normalized_score"])
         
     return results
 
@@ -707,6 +718,34 @@ WEIGHTS = {
     "concerns": 2.0,
     "goals": 1.0
 }
+
+product_embeddings = []
+product_metadata = []
+
+# create product and metadata embeddings for product item info
+# loop through name and info for each product 
+for name, info in Product_Info.items():
+    # holds text info
+    text = info["description"]
+    # embed text description
+    emb = model.encode(text)
+    # add embedding to product_embedding
+    product_embeddings.append(emb)
+    # add product name
+    product_metadata.append(name)
+
+# build index
+xb = np.array(product_embeddings).astype("float32")
+# normalize for cosine similarity
+faiss.normalize_L2(xb)
+
+# build the FAISS index and add the embeddings
+product_index = faiss.IndexFlatIP(xb.shape[1])
+product_index.add(xb)
+
+def get_faiss_scores(context):
+    result = {}
+    return result
 
 # function to calculate coverage score for how well a product addresss the user's skin type, concerns, and goals based on Product_Info and user profile
 def calculate_coverage(product, context):
@@ -731,8 +770,31 @@ def calculate_coverage(product, context):
     # * 1 because goal match is less important than concern and skin type match
     score += len(goal_matches) * WEIGHTS["goals"]
     
-    
     return score
+
+# Converts raw scores to min-max normalization score (0.0 - 1.0)
+def normalize_scores(products):
+    # prevent empty product error
+    if not products:
+        return products
+    
+    # holds all scores
+    scores = [p["score"] for p in products]
+    
+    # grab min and max
+    max_score = max(scores)
+    min_score = min(scores)
+    
+    for p in products:
+        # if only 1 score set it as 1.0
+        if max_score == min_score:
+            p["normalized_score"] = 1.0
+        else:
+            # (current - min) / (max - min)
+            # help determine its overall order in the list of scores
+            p["normalized_score"] = (p["score"] - min_score) / (max_score - min_score)
+    
+    return products
 
 def generate_reasoning(info, context):
     # Generate reasoning for why a product is recommended based on how it addresses the user's skin type, concerns, and goals
@@ -747,17 +809,15 @@ def generate_reasoning(info, context):
         reasoning.append(f"Targets your skin concerns: {', '.join(concern_matches)}.")
         reasoning.append(f"Specifically, {info['description']}")
     else:
-        reasoning.append(f"Does not directly target your specific concerns: {','.join(context['concerns'])}, but may still offer general skincare benefits.")
+        reasoning.append(f"Does not directly target your specific concerns: {', '.join(context['concerns'])}, but may still offer general skincare benefits.")
     
     goal_matches = set(info["goals_addressed"]) & set(context["goals"])
     if goal_matches:
         reasoning.append(f"Helps you work towards your skincare goals: {', '.join(goal_matches)}.")
     else:
-        reasoning.append(f"May not directly align with your specific goals: {','.join(context['goals'])} but could still contribute to overall skin health.")
+        reasoning.append(f"May not directly align with your specific goals: {', '.join(context['goals'])} but could still contribute to overall skin health.")
     
     return " ".join(reasoning)
-
-
     
 
 # ================= PRODUCT RECOMMENDATIONS END =================
@@ -960,7 +1020,6 @@ def have_conversation():
                 # build routine blueprint based on user profile and product rules
                 # blueprint determines how manny products of each type we should recommend based on user profile and product rules but does not specify which products yet
                 routine_blueprint = build_routine(context)
-                print(f"Blueprint: {routine_blueprint}.")
 
                 recommend_routine = []
                 for product_type in routine_blueprint:
