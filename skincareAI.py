@@ -675,6 +675,9 @@ Product_Info = {
 
 # function to recommend products for a given product type category 
 def recommend_for_product_type(category, context, count = 1):
+    # faiss scoring
+    faiss_scores = get_faiss_scores(context)
+
     # Fill one product type at a time based on the routine blueprint and product rules
     candidates = []
     for product_name, product_details in Product_Info.items():
@@ -684,11 +687,22 @@ def recommend_for_product_type(category, context, count = 1):
     # calculate coverage score for each candidate product based on how well it addresses the user's skin type, concerns, and goals
     scored_candidates = []
     for category_product_name, category_product_details in candidates:
-        score = calculate_coverage(category_product_details, context)
+        # rule score on how many categories the product cover
+        rule_score = calculate_coverage(category_product_details, context)
+        
+        # get FAISS similarity score (default 0 if missing)
+        semantic_score = faiss_scores.get(category_product_name, 0)
+        
+        # combine both
+        final_score = (rule_score * 0.7) + (semantic_score * 0.3)
+        
+        # conver score to normalization (0.0 - 1.0)
+        fiass_score = normalize_faiss_scores(get_faiss_scores(context))
+        
         scored_candidates.append({
             "product": category_product_name,
             "info": category_product_details,
-            "score": score
+            "score": final_score
         })
     
     
@@ -726,7 +740,13 @@ product_metadata = []
 # loop through name and info for each product 
 for name, info in Product_Info.items():
     # holds text info
-    text = info["description"]
+    # add more text to increase text/sentence quality before embedding
+    text = f"""
+        {info['description']}
+        Suitable for {', '.join(info['skin_types_addressed'])} skin.
+        Helps with {', '.join(info['concerns_addressed'])}.
+        Support goals like {', '.join(info['goal_addressed'])}.
+    """
     # embed text description
     emb = model.encode(text)
     # add embedding to product_embedding
@@ -744,7 +764,22 @@ product_index = faiss.IndexFlatIP(xb.shape[1])
 product_index.add(xb)
 
 def get_faiss_scores(context):
+    query = f"""
+        I have {context['skin_type']} skin.
+        My concerns are {', '.join(context['concerns'])}.
+        My skincare goals are {', '.join(context['goals'])}.
+        """
+        
+    emb = model.encode(query)
+    emb = np.array([emb]).astype("float32")
+    faiss.normalize_L2(emb)
+    
+    scores, indices = product_index.search(emb, 20)
+    
     result = {}
+    for score, idx, in zip(scores[0], indices[0]):
+        result[product_metadata[idx]] = score
+        
     return result
 
 # function to calculate coverage score for how well a product addresss the user's skin type, concerns, and goals based on Product_Info and user profile
@@ -795,6 +830,31 @@ def normalize_scores(products):
             p["normalized_score"] = (p["score"] - min_score) / (max_score - min_score)
     
     return products
+
+# Convert faiss score to min-max normalized score (0.0 - 1.0)
+def normalize_faiss_scores(scores_dict):
+    # prevent empty scores_dict error
+    if not scores_dict:
+        return scores_dict
+    
+    # hold all values
+    values = list(scores_dict.values())
+    
+    # grab min and max
+    max_value = max(values)
+    min_value = min(values)
+    
+    norm = {}
+    for k, v in values.items():
+        # if only 1 value set it as 1.0
+        if max_value == min_value:
+            norm[k] = 1.0
+        else:
+            # (current - min) / (max - min)
+            # help determine its overall order in the list of scores
+            norm[k] = (v - min_value) / (max_value - min_value)
+    
+    return norm
 
 def generate_reasoning(info, context):
     # Generate reasoning for why a product is recommended based on how it addresses the user's skin type, concerns, and goals
