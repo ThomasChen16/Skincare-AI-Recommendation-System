@@ -5,6 +5,10 @@ import json # for saving userProfile data
 import faiss # for faster similarity search
 import numpy as np
 
+# import functions from files
+from retrieve_skin_info import extract_semantics
+from embedding_model import load_model
+
 # read json file
 #with open("profile.json", "r") as f:
 #    data = json.load(f)
@@ -405,22 +409,6 @@ def extract_multi_input(text, category, debug):
     return aggregated
     
 
-# function to determine which extraction method to use and then call deciding function to filter result based on category
-def extract_semantics(text, category, debug=False):
-    config = configuration[category]
-    
-    # multi label input if separator and category is concerns or goals
-    if any(sep in text for sep in [",", "and", "&"]) and category in ["concerns", "goals"]:
-        sorted_labels =  extract_multi_input(text, category, debug=debug)
-    else:
-    # single label input
-        sorted_labels = retrieve_candidates(text, category, debug=debug)
-    
-    if category == "skin_type":
-        return decide_skin_type(sorted_labels, config)
-    else:
-        return decide_multi(sorted_labels, config)
-    
 
     
 # function to retrive embeddings for user input and reference text and calculate similarity score to determine label candidates
@@ -880,7 +868,8 @@ def generate_reasoning(info, context):
     return " ".join(reasoning)
     
 
-# ================= PRODUCT RECOMMENDATIONS END =================
+# ================= PRODUCT RECOMMENDATIONS END ==================
+
 # ============ CONVERSATION AND PROFILE MANAGEMENT ===============
 
 # Retry function for followup question if couldn't detect skin type, concern, or goal
@@ -914,6 +903,8 @@ def retry_extract(user_profile, category, followup_message, add_function, update
 
 # Main Conservation Function Loop
 def have_conversation():
+    load_model()
+    
     print("Welcome to the Skincare AI Consultant!\n")
     print("Do you have an existing profile? (yes/no)")
     
