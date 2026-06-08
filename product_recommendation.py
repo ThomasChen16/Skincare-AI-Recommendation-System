@@ -1,3 +1,5 @@
+from operator import index
+
 from embedding_model import get_model
 import faiss # for faster similarity search
 import numpy as np
@@ -109,6 +111,7 @@ Product_Info = {
 def recommend_for_product_type(category, context, count = 1):
     # faiss scoring
     faiss_scores = get_faiss_scores(context)
+    normalized_faiss_scores = normalize_faiss_scores(faiss_scores)
 
     # Fill one product type at a time based on the routine blueprint and product rules
     candidates = []
@@ -122,14 +125,11 @@ def recommend_for_product_type(category, context, count = 1):
         # rule score on how many categories the product cover
         rule_score = calculate_coverage(category_product_details, context)
         
-        # get FAISS similarity score (default 0 if missing)
-        semantic_score = faiss_scores.get(category_product_name, 0)
+        # get normalized FAISS similarity score (default 0 if missing)
+        semantic_score = normalized_faiss_scores.get(category_product_name, 0)
         
         # combine both
         final_score = (rule_score * 0.7) + (semantic_score * 0.3)
-        
-        # conver score to normalization (0.0 - 1.0)
-        fiass_score = normalize_faiss_scores(get_faiss_scores(context))
         
         scored_candidates.append({
             "product": category_product_name,
@@ -165,15 +165,18 @@ WEIGHTS = {
     "goals": 1.0
 }
 
-product_embeddings = []
-product_metadata = []
+_product_embeddings = []
+_product_metadata = []
+_product_index = None
 
 def load_product_embeddings():
-    global product_embeddings, product_metadata
+    global _product_embeddings, _product_metadata, _product_index
     
-    if not product_embeddings or not product_metadata:
+    if _product_index is None:
         print("Loading product embeddings...")
+        
         model = get_model() # get loaded model
+        
         # create product and metadata embeddings for product item info
         # loop through name and info for each product 
         for name, info in Product_Info.items():
@@ -183,26 +186,29 @@ def load_product_embeddings():
                 {info['description']}
                 Suitable for {', '.join(info['skin_types_addressed'])} skin.
                 Helps with {', '.join(info['concerns_addressed'])}.
-                Support goals like {', '.join(info['goal_addressed'])}.
+                Support goals like {', '.join(info['goals_addressed'])}.
             """
             
             # embed text description
             emb = model.encode(text)
+            
             # add embedding to product_embedding
-            product_embeddings.append(emb)
+            _product_embeddings.append(emb)
             # add product name
-            product_metadata.append(name)
+            _product_metadata.append(name)
+
+        # build index
+        xb = np.array(_product_embeddings).astype("float32")
+        # normalize for cosine similarity
+        faiss.normalize_L2(xb)
+
+        # build the FAISS index and add the embeddings
+        _product_index = faiss.IndexFlatIP(xb.shape[1])
+        _product_index.add(xb)
         
         print("Product embeddings loaded!\n")
-
-# build index
-xb = np.array(product_embeddings).astype("float32")
-# normalize for cosine similarity
-faiss.normalize_L2(xb)
-
-# build the FAISS index and add the embeddings
-product_index = faiss.IndexFlatIP(xb.shape[1])
-product_index.add(xb)
+    
+    return _product_index
 
 def get_faiss_scores(context):
     query = f"""
@@ -216,11 +222,12 @@ def get_faiss_scores(context):
     emb = np.array([emb]).astype("float32")
     faiss.normalize_L2(emb)
     
-    scores, indices = product_index.search(emb, 20)
+    index = load_product_embeddings()
+    scores, indices = index.search(emb, len(_product_metadata))
     
     result = {}
     for score, idx, in zip(scores[0], indices[0]):
-        result[product_metadata[idx]] = score
+        result[_product_metadata[idx]] = float(score)
         
     return result
 
@@ -287,14 +294,14 @@ def normalize_faiss_scores(scores_dict):
     min_value = min(values)
     
     norm = {}
-    for k, v in values.items():
+    for key, value in scores_dict.items():
         # if only 1 value set it as 1.0
         if max_value == min_value:
-            norm[k] = 1.0
+            norm[key] = 1.0
         else:
             # (current - min) / (max - min)
             # help determine its overall order in the list of scores
-            norm[k] = (v - min_value) / (max_value - min_value)
+            norm[key] = (value - min_value) / (max_value - min_value)
     
     return norm
 

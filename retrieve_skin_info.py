@@ -176,34 +176,45 @@ def get_reference_embeddings():
 
     return reference_embeddings 
 
-all_embeddings = []
-metadata = []
+faiss_index = None
+metadata = None
 
-
-
-# 1 embedding for each reference text
-# create metadata embeddings list to store the category and label for each embedding
-for category, labels in references_groups.items():
-    # loop through each label and text in the category and create embedding for the text
-    for label, texts in labels.items():
+def get_faiss_index():
+    global faiss_index, metadata
+    
+    if faiss_index is None:
+        print("Building reference FAISS index...")
+        
         model = get_model() # get loaded model
-        embs = model.encode(texts, convert_to_tensor=True)
-        # store each embedding in all_embeddings list and store its category and label in metadata
-        for emb in embs:
-            all_embeddings.append(emb.cpu().numpy())
-            metadata.append((category, label))
+
+        all_embeddings = []
+        metadata = []
+        
+    # 1 embedding for each reference text
+    # create metadata embeddings list to store the category and label for each embedding
+    for category, labels in references_groups.items():
+        # loop through each label and text in the category and create embedding for the text
+        for label, texts in labels.items():
+            embs = model.encode(texts, convert_to_tensor=True)
+            
+            # store each embedding in all_embeddings list and store its category and label in metadata
+            for emb in embs:
+                all_embeddings.append(emb.cpu().numpy())
+                metadata.append((category, label))
     
         
-xb = np.array(all_embeddings).astype("float32")
+    xb = np.array(all_embeddings).astype("float32")
 
-# normalize for cosine similarity
-faiss.normalize_L2(xb)
+    # normalize for cosine similarity
+    faiss.normalize_L2(xb)
 
-dim = xb.shape[1]
+    dim = xb.shape[1]
 
-# build the FAISS index and add the embeddings
-index = faiss.IndexFlatIP(dim)
-index.add(xb)
+    # build the FAISS index and add the embeddings
+    faiss_index = faiss.IndexFlatIP(dim)
+    faiss_index.add(xb)
+    
+    return faiss_index, metadata
 
 
 configuration = {
@@ -213,7 +224,9 @@ configuration = {
 }
 
 # function to perform FAISS search for similar reference text to user input and return the scores and labels of the matches
+# semantics
 def faiss_search(text, top_k=20):
+    model = get_model() # get loaded model
     # embed the input text
     user_emb = model.encode(text)
     user_emb = np.array([user_emb]).astype("float32")
@@ -222,7 +235,7 @@ def faiss_search(text, top_k=20):
     faiss.normalize_L2(user_emb)
     
     # search the index for the top_k most similar embeddings and return the scores and indices of the matches
-    scores, indices = index.search(user_emb, top_k)
+    scores, indices = faiss_index.search(user_emb, top_k)
 
     # return the scores and indices of the matches
     return scores[0], indices[0]    
@@ -306,7 +319,7 @@ def extract_multi_input(text, category, debug):
     aggregated = {}
     # for each label take the max score across the different parts as the final score for that label and append to aggregated
     for label, scores in label_scores.items():
-        aggregated[label] = max(scores)
+        aggregated[label] = float(max(scores))
         
     # sort by score
     aggregated = sorted(aggregated.items(), key=lambda x: x[1], reverse=True)
@@ -342,12 +355,13 @@ def retrieve_candidates(text, category, debug=False):
     
     # retrieve score and indices of similar reference text using FAISS serach
     scores, indices = faiss_search(text, top_k=30)
+    scores = [float(s) for s in scores]
     
     # detected labels candidates
     label_scores = {}
     
     # loop through scores and indices and get the category and label for each match from metadata
-    for scores, idx in zip(scores, indices):
+    for score, idx in zip(scores, indices):
         group, label = metadata[idx]
         
         if group != category:
@@ -355,9 +369,9 @@ def retrieve_candidates(text, category, debug=False):
         
         # take max score per label
         if label not in label_scores:
-            label_scores[label] = scores
+            label_scores[label] = float(score)
         else:
-            label_scores[label] = max(label_scores[label], scores)
+            label_scores[label] = float(max(label_scores[label], score))
     
     # sort labels by scores in descending order  
     sorted_labels = sorted(label_scores.items(), key=lambda x: x[1], reverse=True)
