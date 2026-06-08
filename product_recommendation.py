@@ -108,9 +108,8 @@ Product_Info = {
 }
 
 # function to recommend products for a given product type category 
-def recommend_for_product_type(category, context, count = 1):
-    # faiss scoring
-    faiss_scores = get_faiss_scores(context)
+def recommend_for_product_type(category, context, faiss_scores, count = 1):
+    
     normalized_faiss_scores = normalize_faiss_scores(faiss_scores)
 
     # Fill one product type at a time based on the routine blueprint and product rules
@@ -143,7 +142,6 @@ def recommend_for_product_type(category, context, count = 1):
     
     # sort candidates with new normalize score
     scored_candidates.sort(key=lambda x: x["normalized_score"], reverse=True)
-    
     
     results = []
     # [:count] to get top products based on count specified in Build Routine
@@ -269,6 +267,11 @@ def normalize_scores(products):
     # grab min and max
     max_score = max(scores)
     min_score = min(scores)
+    
+    # if only 1 product, set its normalized score to its raw score
+    if len(products) == 1:
+        products[0]["normalized_score"] = products[0]["score"]
+        return products
     
     for p in products:
         # if only 1 score set it as 1.0

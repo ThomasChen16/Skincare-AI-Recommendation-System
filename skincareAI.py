@@ -11,9 +11,10 @@ from retrieve_skin_info import get_reference_embeddings
 from retrieve_skin_info import get_faiss_index
 
 
-from routine import build_routine
-
 from product_recommendation import recommend_for_product_type
+from product_recommendation import get_faiss_scores
+
+from routine import build_routine
 
 from embedding_model import load_model
 
@@ -322,6 +323,9 @@ def have_conversation():
                     "concerns": user_profile.concerns,
                     "goals": user_profile.goals
                 }
+                
+                # get the faiss score for the current context
+                faiss_score = get_faiss_scores(context)
 
                 # build routine blueprint based on user profile and product rules
                 # blueprint determines how manny products of each type we should recommend based on user profile and product rules but does not specify which products yet
@@ -330,7 +334,7 @@ def have_conversation():
                 recommend_routine = []
                 for product_type in routine_blueprint:
                     # for each product type in routine_blueprint get specific product recommendations
-                    products = recommend_for_product_type(product_type["category"], context, product_type["count"])
+                    products = recommend_for_product_type(product_type["category"], context, faiss_score,product_type["count"])
                     # extend recommend_routine with products while avoiding duplicates
                     recommend_routine.extend(products)
                 
@@ -378,8 +382,5 @@ def have_conversation():
                 json.dump(existing_data, f, indent=4)
             break
 
-    
-    
-if __name__ == "__main__":
-    have_conversation()
+
     
