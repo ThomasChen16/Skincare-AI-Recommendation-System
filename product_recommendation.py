@@ -42,7 +42,7 @@ Product_Info = {
         "goals_addressed": ["soothe"],
         "description": "Barrier repair moisturizers contain ingredients like ceramides, panthenol, and centella would help strengthen and restore the skin's natural barrier, which is crucial for sensitive skin that is prone to irritation and inflammation."
     },
-    "Gentle Fragence-Free Cleanser": {
+    "Gentle Fragrance-Free Cleanser": {
         "type": "cleanser",
         "skin_types_addressed": ["sensitive"],
         "concerns_addressed": ["sensitivity"],
@@ -151,6 +151,7 @@ def recommend_for_product_type(category, context, count = 1):
         results.append({
             "product": product["product"],
             "type": product["info"]["type"],
+            "raw_score": product["score"],
             "score": product["normalized_score"],
             "reason": generate_reasoning(product["info"], context)
         })
@@ -212,9 +213,9 @@ def load_product_embeddings():
 
 def get_faiss_scores(context):
     query = f"""
-        I have {context['skin_type']} skin.
-        My concerns are {', '.join(context['concerns'])}.
-        My skincare goals are {', '.join(context['goals'])}.
+        My skin type is {context['skin_type']}.
+        My skincare concerns include: {', '.join(context['concerns'])}.
+        My skincare goals include: {', '.join(context['goals'])}.
         """
         
     model = get_model() # get loaded model 
