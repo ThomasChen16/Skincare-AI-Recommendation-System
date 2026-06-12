@@ -234,7 +234,9 @@ def faiss_search(text, top_k=20):
     # normalize the user embedding for cosine similarity
     faiss.normalize_L2(user_emb)
     
+    
     # get the FAISS index and metadata
+    # metadata is not used in this function so we use _ to ignore it
     index, _ = get_faiss_index() 
     
     # search the index for the top_k most similar embeddings and return the scores and indices of the matches
