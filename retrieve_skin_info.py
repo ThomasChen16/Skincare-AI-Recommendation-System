@@ -190,29 +190,29 @@ def get_faiss_index():
         all_embeddings = []
         metadata = []
         
-    # 1 embedding for each reference text
-    # create metadata embeddings list to store the category and label for each embedding
-    for category, labels in references_groups.items():
-        # loop through each label and text in the category and create embedding for the text
-        for label, texts in labels.items():
-            embs = model.encode(texts, convert_to_tensor=True)
-            
-            # store each embedding in all_embeddings list and store its category and label in metadata
-            for emb in embs:
-                all_embeddings.append(emb.cpu().numpy())
-                metadata.append((category, label))
-    
+        # 1 embedding for each reference text
+        # create metadata embeddings list to store the category and label for each embedding
+        for category, labels in references_groups.items():
+            # loop through each label and text in the category and create embedding for the text
+            for label, texts in labels.items():
+                embs = model.encode(texts, convert_to_tensor=True)
+                
+                # store each embedding in all_embeddings list and store its category and label in metadata
+                for emb in embs:
+                    all_embeddings.append(emb.cpu().numpy())
+                    metadata.append((category, label))
         
-    xb = np.array(all_embeddings).astype("float32")
+            
+        xb = np.array(all_embeddings).astype("float32")
 
-    # normalize for cosine similarity
-    faiss.normalize_L2(xb)
+        # normalize for cosine similarity
+        faiss.normalize_L2(xb)
 
-    dim = xb.shape[1]
+        dim = xb.shape[1]
 
-    # build the FAISS index and add the embeddings
-    faiss_index = faiss.IndexFlatIP(dim)
-    faiss_index.add(xb)
+        # build the FAISS index and add the embeddings
+        faiss_index = faiss.IndexFlatIP(dim)
+        faiss_index.add(xb)
     
     return faiss_index, metadata
 
@@ -234,8 +234,11 @@ def faiss_search(text, top_k=20):
     # normalize the user embedding for cosine similarity
     faiss.normalize_L2(user_emb)
     
+    # get the FAISS index and metadata
+    index, _ = get_faiss_index() 
+    
     # search the index for the top_k most similar embeddings and return the scores and indices of the matches
-    scores, indices = faiss_index.search(user_emb, top_k)
+    scores, indices = index.search(user_emb, top_k)
 
     # return the scores and indices of the matches
     return scores[0], indices[0]    
