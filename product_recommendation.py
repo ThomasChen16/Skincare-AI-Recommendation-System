@@ -7,6 +7,7 @@ import numpy as np
 # ================ PRODUCT RECOMMEDATIONS ==================
 # Data structure to hold product info
 Product_Info = {
+    # ==================== EXISTING PRODUCTS (KEPT) ====================
     "Salicylic Acid Cleanser": {
         "type": "cleanser",
         "skin_types_addressed": ["oily", "combination"],
@@ -104,6 +105,60 @@ Product_Info = {
         "concerns_addressed": ["brightening", "sun protection"],
         "goals_addressed": ["brighten", "protection"],
         "description": "Vitamin C serums are effective for brightening the skin and reducing the appearance of dark spots and hyperpigmentation by inhibiting melanin production and providing antioxidant protection."
+    },
+    
+    # 1. ACNE - Second treatment (already have Salicylic Acid, now add Benzoyl Peroxide)
+    "Benzoyl Peroxide Spot Treatment": {
+        "type": "treatment",
+        "skin_types_addressed": ["oily", "combination"],
+        "concerns_addressed": ["acne"],
+        "goals_addressed": ["clear_skin"],
+        "description": "Benzoyl peroxide kills acne-causing bacteria (C. acnes) and helps to unclog pores. Use as a spot treatment for inflamed breakouts. Not for sensitive or dry skin types."
+    },
+    
+    # 2. AGING - Add a peptide treatment (Retinoid already exists)
+    "Peptide Firming Serum": {
+        "type": "serum",
+        "skin_types_addressed": ["dry", "normal", "combination", "sensitive"],
+        "concerns_addressed": ["aging"],
+        "goals_addressed": ["anti_aging"],
+        "description": "Peptides signal the skin to produce more collagen and elastin, improving firmness and reducing fine lines without irritation, making them suitable for sensitive skin that cannot tolerate retinoids."
+    },
+    
+    # 3. SENSITIVITY - Add a dedicated soothing treatment (existing products are cleanser/moisturizer)
+    "Centella Asiatica Soothing Ampoule": {
+        "type": "treatment",
+        "skin_types_addressed": ["sensitive", "dry", "combination"],
+        "concerns_addressed": ["sensitivity"],
+        "goals_addressed": ["soothe"],
+        "description": "A concentrated ampoule with centella asiatica (cica), madecassoside, and green tea extract to rapidly calm redness, stinging, and inflammation. Ideal for reactive or compromised skin barriers."
+    },
+    
+    # 4. DEHYDRATION - MISSING CONCERN (dehydration is lack of water, not oil)
+    "Hyaluronic Acid + B5 Hydration Treatment": {
+        "type": "serum",
+        "skin_types_addressed": ["oily", "dry", "combination", "sensitive", "normal"],
+        "concerns_addressed": ["dehydration"],
+        "goals_addressed": ["hydration"],
+        "description": "A treatment serum with multiple weights of hyaluronic acid and vitamin B5 that draws water into the skin and holds it there. Crucial for dehydrated skin (which can be oily or dry)."
+    },
+    
+    # 5. HYPERPIGMENTATION - MISSING CONCERN
+    "Tranexamic Acid + Kojic Acid Dark Spot Corrector": {
+        "type": "treatment",
+        "skin_types_addressed": ["normal", "oily", "combination"],
+        "concerns_addressed": ["hyperpigmentation"],
+        "goals_addressed": ["brighten"],
+        "description": "A targeted treatment combining tranexamic acid, kojic acid, and niacinamide to inhibit melanin production and fade post-inflammatory hyperpigmentation (PIH), melasma, and sun spots without irritation."
+    },
+    
+    # 6. SUN_DAMAGE - Add a repair treatment (sunscreen prevents, this repairs)
+    "Niacinamide + Licorice Root Repair Treatment": {
+        "type": "serum",
+        "skin_types_addressed": ["oily", "dry", "combination", "sensitive", "normal"],
+        "concerns_addressed": ["sun_damage"],
+        "goals_addressed": ["brighten", "protection"],
+        "description": "Niacinamide (vitamin B3) helps repair UV-induced DNA damage, reduces sunburn cells, and improves barrier function. Licorice root extract fades existing sun spots and calms inflammation."
     }
 }
 
