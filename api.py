@@ -1,7 +1,10 @@
 from fastapi import FastAPI
 from embedding_model import load_model
 from pydantic import BaseModel
+
 from retrieve_skin_info import extract_semantics, get_reference_embeddings, get_faiss_index
+from product_recommendation import get_faiss_scores, recommend_for_product_type
+from routine import build_routine
 
 # Initialize the FastAPI application
 # Creates a web server that listens for HTTP requests (waits for requests)
@@ -60,4 +63,46 @@ def analyze_profile(request: AnalyzeRequest):
         "concerns": concerns,
         "goals": goals
     }
+
+# Define the request model for the recommednation endpoint
+# Define the data the API expects to receive from the frontend
+class RecommendRequest(BaseModel):
+    # frontend must send time, finalized skin_type, concerns, and goals
+    time: str
+    skin_type: str
+    concerns: list[str]
+    goals: list[str]
+
+# Extract profile and generate routine
+@app.post("/recommend")
+def recommend(request: RecommendRequest):
+    # request contains the JSON data the frontend set
     
+    # format the inputs into context dictionary
+    context = {
+        "time": request.time,
+        "skin_type": request.skin_type,
+        "concerns": request.concerns,
+        "goals": request.goals
+    }
+    
+    # get faiss scores for the current context
+    faiss_score = get_faiss_scores(context)
+    
+    # build routine blueprint based on user profile and product rules
+    # blueprint determines how manny products of each type we should recommend based on user profile and product rules but does not specify which products yet
+    routine_blueprint = build_routine(context)
+
+    recommend_routine = []
+    for product_type in routine_blueprint:
+        # for each product type in routine_blueprint get specific product recommendations
+        products = recommend_for_product_type(product_type["category"], context, faiss_score, product_type["count"])
+        
+        # extend recommend_routine with products while avoiding duplicates
+        recommend_routine.extend(products)
+    
+    
+    # return as JSON response to the frontend
+    return {
+        "routine": recommend_routine
+    }

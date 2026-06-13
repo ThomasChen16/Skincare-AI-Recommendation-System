@@ -334,7 +334,7 @@ def have_conversation():
                 recommend_routine = []
                 for product_type in routine_blueprint:
                     # for each product type in routine_blueprint get specific product recommendations
-                    products = recommend_for_product_type(product_type["category"], context, faiss_score,product_type["count"])
+                    products = recommend_for_product_type(product_type["category"], context, faiss_score, product_type["count"])
                     # extend recommend_routine with products while avoiding duplicates
                     recommend_routine.extend(products)
                 
