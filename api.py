@@ -1,4 +1,5 @@
 from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
 from embedding_model import load_model
 from pydantic import BaseModel
 
@@ -6,9 +7,18 @@ from retrieve_skin_info import extract_semantics, get_reference_embeddings, get_
 from product_recommendation import get_faiss_scores, recommend_for_product_type
 from routine import build_routine
 
+
 # Initialize the FastAPI application
 # Creates a web server that listens for HTTP requests (waits for requests)
 app = FastAPI()
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["http://localhost:5173"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 # Define a simple route
 # functions run when someone vists the root URL ("/") using HTTP GET method
