@@ -31,6 +31,12 @@ function App() {
       return
     }
 
+    // if the stage is 'routine', call handleRoutineSelection and return early
+    if (stage == 'routine') {
+      handleRoutineSelection(text)
+      return
+    }
+
     const currentQuestion = questions[step]
     // add user's message, save their answer
     const userMessage = { sender: 'user', text }
@@ -72,10 +78,19 @@ function App() {
       setStage('awaiting_change_field') // change to 'awaiting_change_field' stage
 
     } else if (text.toLowerCase().includes('routine')) {
-      // if user wants to move on to their routine, display a message and reset the conversation
-      const botMessage = { sender: 'bot', text: 'Great! Let\'s move on to your skincare routine.' }
-      setMessages([...messages, botMessage])
+      // if user wants to move on to their routine, display a message and ask morning routine or night routine
+      setMessages([
+        ...messages,
+        {
+          sender: 'bot',
+          text: 'Great! Let\'s move on to your skincare routine.'
+        },
+        {
+          sender: 'bot',
+          text: 'What routine would you like to generate first? Morning routine or Night routine?'
+        }])
       setStage('routine') // change the stage to 'routine' to indicate to move on to routine
+
     } else {
       // if user input isn't recognized, ask to clarify
       const botMessage = { sender: 'bot', text: 'I didn\'t understand that. Please type "change" to change your answers or "routine" to move on to your skincare routine.' }
@@ -110,6 +125,8 @@ function App() {
           goals_text: rawAnswers.goals,
         }),
       })
+
+      // display analyzed results
       const data = await response.json()
       setAnalyzed(data) // store the analyzed data in state { skin_type, concerns, goals}
 
@@ -120,6 +137,57 @@ function App() {
       setMessages((prev) => [...prev, { sender: 'bot', text: 'Sorry, there was an error analyzing your answers. Please try again.'}]) // error handling if API call fails
     }
   }
+
+  // take in user response for morning or night and build routine by calling the backend API and display the results
+  async function handleRoutineSelection(userInput) {
+    let time;
+
+    // validate time
+    if (userInput.toLowerCase().includes("morning")) {
+      time = "a.m"
+    }
+    else if (userInput.toLowerCase().includes("night")) {
+      time = "p.m"
+    }
+    else {
+      setMessages(prev => [
+        ...prev,
+        { sender: 'user', text: userInput },
+        {
+          sender: 'bot',
+          text: 'Please type Morning or Night.'
+        }
+      ]);
+      return;
+    }
+
+    try {
+      const response = await fetch("http://localhost:8000/recommend", {
+        method: "POST",
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          time: time,
+          skin_type: analyzed.skin_type, // data saved in analyzed
+          concerns: analyzed.concerns,
+          goals: analyzed.goals
+        })
+      })
+
+      // display routine results
+      let routineText = 'Here is your ${time} routine:\n\n';
+
+      data.routine.forEach((product) => {
+        routineText +=
+          `• ${product.product}\n` +
+          `Type: ${product.type}\n` +
+          `Reason: ${product.reason}\n\n`
+      });
+
+    } catch (error) {
+      setMessages((prev) => [...prev, { sender: 'bot', text: 'Sorry, there was an error generating your routine. Please try again.'}]) // error handling if API call fails
+    }
+  }
+
 
   return (
     <div className="app">
