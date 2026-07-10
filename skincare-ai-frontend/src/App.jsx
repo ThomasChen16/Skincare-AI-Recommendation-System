@@ -1,6 +1,7 @@
 import ChatMessage from './components/ChatMessage'
 import ChatWindow from './components/ChatWindow'
-import { useState } from 'react'
+import RoutineDashboard from './components/RoutineDashboard'
+import { useState } from 'react' // how react switches between UI using useState
 
 const questions = [
   {key: 'skin_type', text: 'Tell me about your skin type. How would you describe it?'},
@@ -28,12 +29,6 @@ function App() {
     // if the stage is 'awaiting_change_field', call handleChangeFieldResponse and return early
     if (stage === 'awaiting_change_field') {
       handleChangeFieldResponse(text)
-      return
-    }
-
-    // if the stage is 'routine', call handleRoutineSelection and return early
-    if (stage == 'routine') {
-      handleRoutineSelection(text)
       return
     }
 
@@ -78,18 +73,10 @@ function App() {
       setStage('awaiting_change_field') // change to 'awaiting_change_field' stage
 
     } else if (text.toLowerCase().includes('routine')) {
-      // if user wants to move on to their routine, display a message and ask morning routine or night routine
-      setMessages([
-        ...messages,
-        {
-          sender: 'bot',
-          text: 'Great! Let\'s move on to your skincare routine.'
-        },
-        {
-          sender: 'bot',
-          text: 'What routine would you like to generate first? Morning routine or Night routine?'
-        }])
-      setStage('routine') // change the stage to 'routine' to indicate to move on to routine
+      // transition to next stage routine with new UI
+      const botMessage = { sender: 'bot', text: 'Great! Taking you to your routine dashboard.' }
+      setMessages([...messages, botMessage])
+      setStage('routine')
 
     } else {
       // if user input isn't recognized, ask to clarify
@@ -138,69 +125,27 @@ function App() {
     }
   }
 
-  // take in user response for morning or night and build routine by calling the backend API and display the results
-  async function handleRoutineSelection(userInput) {
-    let time;
-
-    // validate time
-    if (userInput.toLowerCase().includes("morning")) {
-      time = "a.m"
-    }
-    else if (userInput.toLowerCase().includes("night")) {
-      time = "p.m"
-    }
-    else {
-      setMessages(prev => [
-        ...prev,
-        { sender: 'user', text: userInput },
-        {
-          sender: 'bot',
-          text: 'Please type Morning or Night.'
-        }
-      ]);
-      return;
-    }
-
-    try {
-      const response = await fetch("http://localhost:8000/recommend", {
-        method: "POST",
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          time: time,
-          skin_type: analyzed.skin_type, // data saved in analyzed
-          concerns: analyzed.concerns,
-          goals: analyzed.goals
-        })
-      })
-
-      // display routine results
-      let routineText = 'Here is your ${time} routine:\n\n';
-
-      data.routine.forEach((product) => {
-        routineText +=
-          `• ${product.product}\n` +
-          `Type: ${product.type}\n` +
-          `Reason: ${product.reason}\n\n`
-      });
-
-    } catch (error) {
-      setMessages((prev) => [...prev, { sender: 'bot', text: 'Sorry, there was an error generating your routine. Please try again.'}]) // error handling if API call fails
-    }
+  // takes user from the dashboad back into chat through stage 'result'
+  function handleEditProfile() {
+    setStage('results')
   }
 
 
   return (
     <div className="app">
       <h1>Skin assistant</h1>
-      {/* chat message layout between user and bot */}
-      <ChatWindow onSend={handleSend}>
-        {messages.map((msg, index) => (
-          <ChatMessage key={index} sender={msg.sender} text={msg.text} /> // render each message using the ChatMessage component
-        ))}
-      </ChatWindow>
+      {stage === 'routine' ? (
+        <RoutineDashboard profile={analyzed} onEditProfile={handleEditProfile} />
+      ) : (
+        <ChatWindow onSend={handleSend}>
+          {messages.map((msg, index) => (
+            <ChatMessage key={index} sender={msg.sender} text={msg.text} />
+          ))}
+        </ChatWindow>
+      )}
     </div>
   )
-}
+  }
 
 // export the component so it can be used in other files
 export default App
