@@ -1,9 +1,9 @@
+import LoginScreen from './components/LoginScreen'
 import ChatMessage from './components/ChatMessage'
 import ChatWindow from './components/ChatWindow'
-import LoginScreen from './components/LoginScreen'
 import RoutineDashboard from './components/RoutineDashboard'
-import LoginScreen from './components/LoginScreen'
-import { useState } from 'react' // how react switches between UI using useState
+import LogoutScreen  from './components/LogoutScreen'
+import { useState, useEffect } from 'react' // how react switches between UI using useState and side effects tthat happen outside standard rendering flow using useEffect
 
 const questions = [
   {key: 'skin_type', text: 'Tell me about your skin type. How would you describe it?'},
@@ -21,34 +21,63 @@ function App() {
   const [stage, setStage] = useState('login') // track the current state of the conversation: 'login', 'asking', 'results' or 'routine'
   const [isEditing, setIsEditing] = useState(false) // track if user is editing their answers
   const [analyzed, setAnalyzed] = useState(null) // track whether the user input is being analyzed
+  const [loginMode, setLoginMode] = useState('login') // 'login' or 'create'
+  const [amRoutine, setAmRoutine] = useState([]) // store user's amRoutine
+  const [pmRoutine, setPmRoutine] = useState([]) // store user's pmRoutine
+  const [error, setError] = useState(null)
+  const [generatedId, setGeneratedId] = useState(null) // generate unique_id for new users
 
   // handle login function
-  async function login(userId, userName='User') {
-     try {
-        //fetch() browser function that makes HTTP request
-        const response = await fetch("http://localhost:8000/login", {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ // convet data to JSON string and send it to request body (user_id and name)
-                user_id: userId,
-                name: name || 'User' // default 'User'
-            })
+  async function handleLogin(data) {
+    try {
+      let response;
+      
+      if (data.type === 'create') {
+        // Create new account - backend will generate unique_id
+        response = await fetch("http://localhost:8000/login", {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            unique_id: '', // backend will generate
+            name: data.name
+          })
         })
+      } else {
+        // Login with existing unique_id
+        response = await fetch("http://localhost:8000/login", {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            unique_id: data.unique_id,
+            name: data.name || 'User'
+          })
+        })
+      }
 
-        // read the response body and converts JSON to Javascript object
-        const data = await response.json()
+      if (!response.ok) {
+        throw new Error('Login failed')
+      }
 
-        // set user state data
-        setUser(data)
+      // read the response body and converts JSON to Javascript object
+      const userData = await response.json()
 
-        // set stage to 'asking'
-        setStage('asking')
+      // set user state data
+      setUser(userData)
 
-        // store user_id and user_name in localStorage
-        localStorage.setItem('user_id', data.user_id)
-        localStorage.setItem('user_name', data.name)
+      // If this was a create account, store the generated ID to display
+      if (data.type === 'create') {
+        setGeneratedId(userData.unique_id)
+      }
+
+      // set stage to 'asking'
+      setStage('asking')
+
+      // store user_id and user_name in localStorage
+      localStorage.setItem('user_id', userData.unique_id)
+      localStorage.setItem('user_name', userData.name)
     } catch (error) {
       console.error('Login failed:', error)
+      setError('Login failed. Please try again.')
     }
   }
 
@@ -67,8 +96,10 @@ function App() {
       // set user state null
       setUser(null)
 
+      // pass the unique_id to logoutscreen
+
       // set stage to 'login'
-      setStage('login')
+      setStage('logout')
     } catch (error) {
       console.log('Logout failed', error)
     }
@@ -81,10 +112,12 @@ function App() {
 
     try {
       // fetch() browser function to make HTTP request
-      const response = await fetch('http://localhost:8000/profile/${user.user_id}')
+      const response = await fetch(`http://localhost:8000/profile/${user.unique_id}`)
 
       // read the response body and converts JSON to Javascript object
       const data = await response.json()
+      
+      console.log('Profile data loaded:', data) // DEBUG
 
       // check if profile exists and has skin_type
       if (data.profile && data.profile.skin_type) {
@@ -95,13 +128,56 @@ function App() {
           goals: data.profile.goals
         })
 
+        // load saved routines if they exist
+        console.log('AM routine from profile:', data.profile.am_routine) // DEBUG
+        console.log('PM routine from profile:', data.profile.pm_routine) // DEBUG
+        
+        if (data.profile.am_routine) {
+          setAmRoutine(data.profile.am_routine)
+        }
+        if (data.profile.pm_routine) {
+          setPmRoutine(data.profile.pm_routine)
+        }
+
         // set stage to 'routine'
         setStage('routine')
+      } else {
+        console.log('No profile found or missing skin_type') // DEBUG
       }
     } catch (error) {
       console.log('Failed to load profile:', error)
     }
   }
+
+  // useEffect to check for existing sessions on app load
+  useEffect(() => {
+    // get savedUserId
+    const savedUserId = localStorage.getItem('user_id')
+
+    // get savedUserName
+    const savedUserName = localStorage.getItem('user_name')
+
+    // if savedUserId exists, call handleLogin function
+    if (savedUserId) {
+      handleLogin({
+        type: 'login',
+        unique_id: savedUserId,
+        name: savedUserName || 'User'
+      })
+    }
+  }, [])
+
+  // useEffect to load saved profile when user logs in
+  useEffect(() => {
+    // if user exist, call loadSavedProfile
+    if (user) {
+      loadSavedProfile().then(() => {
+        console.log('Profile load completed') // DEBUG
+      }).catch(err => {
+        console.error('Profile load error:', err) // DEBUG
+      })
+    }
+  }, [user])
 
   // handle the chat function on deciding what stage to go to
   async function handleSend(text) {
@@ -184,7 +260,7 @@ function App() {
     }
   }
 
-  // analye the user's answers by calling the backend API and display the results
+  // analzye the user's answers by calling the backend API and display the results
   async function callAnalyze(rawAnswers) {
     try {
       const response = await fetch("http://localhost:8000/analyze", {
@@ -194,6 +270,7 @@ function App() {
           skin_text: rawAnswers.skin_type,
           concerns_text: rawAnswers.concerns,
           goals_text: rawAnswers.goals,
+          user_id: user?.user_id
         }),
       })
 
@@ -216,22 +293,90 @@ function App() {
     setStage('results')
   }
 
+  // generate am and pm routine by calling the backend API and display the results
+  async function generateRoutine() {
+    if (!analyzed || !user) return // make sure user input is analyzed and user is logged in
+
+    try {
+        // fetch() browser function that makes HTTP request
+        const response = await fetch("http://localhost:8000/recommend", {
+          method: "POST", // sending data to server
+          headers: { 'Content-Type': 'application/json' }, // tell server we're sending JSON
+          body: JSON.stringify({ // convert data to JSON string and send it to request body
+            time: "a.m",
+            skin_type: analyzed.skin_type,
+            concerns: analyzed.concerns,
+            goals: analyzed.goals,
+            unique_id: user.unique_id
+          }),
+        })
+
+        // read the response body and converts the JSON to JavaScript object
+        const data = await response.json()
+
+        setAmRoutine(data.am_routine)
+        setPmRoutine(data.pm_routine)
+        setStage('routine')
+
+    } catch (error) {
+      setError("Something went wrong generating your routine: " + error.message)
+    }
+  }
 
   return (
     <div className="app">
       <h1>Skin assistant</h1>
-      {stage === 'routine' ? (
-        <RoutineDashboard profile={analyzed} onEditProfile={handleEditProfile} />
-      ) : (
-        <ChatWindow onSend={handleSend}>
+
+      {stage == 'login' && (
+        <LoginScreen 
+          onLogin={handleLogin}
+          mode={loginMode}
+          setMode={setLoginMode}
+          error={error}
+          generatedId={generatedId}
+        />
+      )}
+
+      {stage === 'routine' && (
+        <div>
+          <div className='user-info'>
+            <span>Welcome, {user?.name}</span>
+             <button onClick={logout}>Logout</button>
+          </div>
+          <RoutineDashboard
+            profile={analyzed}
+            onEditProfile={handleEditProfile}
+            amRoutine={amRoutine}
+            pmRoutine={pmRoutine}
+            onGenerateRoutine={generateRoutine}
+          />
+        </div>
+      )}
+
+      {(stage==='asking' || stage==='results' || stage==='awaiting_change_field') && (
+        <div>
+          <div className='user-info'>
+            <span>Welcome, {user?.name}</span>
+            <button onClick={logout}>Logout</button>
+          </div>
+          <ChatWindow onSend={handleSend}>
           {messages.map((msg, index) => (
             <ChatMessage key={index} sender={msg.sender} text={msg.text} />
           ))}
         </ChatWindow>
+        </div>
       )}
     </div>
+
+    //{stage==='logout' && (
+      //<div>
+        //<div>
+          //<span>Goodbye, {user?.name}</span>
+        //</div>
+      //</div>
+    //)}
   )
-  }
+}
 
 // export the component so it can be used in other files
 export default App
