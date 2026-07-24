@@ -443,3 +443,67 @@ body {
   color: #64748b;
   font-style: italic;
 }
+
+.logout-screen {
+  max-width: 1000px;
+  margin: 0 auto;
+  padding: 40px 20px;
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+}
+
+.logout-screen h1 {
+  font-size: 28px;
+  font-weight: 600;
+  color: #1a1a1a;
+  margin-bottom: 32px;
+  text-align: center;
+}
+
+.logout-details {
+  text-align: center;
+  padding: 40px 20px;
+  background: #fff;
+  border: 1px solid #e2e8f0;
+  border-radius: 16px;
+  max-width: 500px;
+  width: 100%;
+}
+
+.logout-details p {
+  font-size: 14px;
+  color: #64748b;
+  margin-bottom: 12px;
+}
+
+.unique-id-display {
+  padding: 16px;
+  background: #f1f5f9;
+  border: 2px dashed #3b82f6;
+  border-radius: 10px;
+  font-size: 20px;
+  font-weight: 600;
+  color: #3b82f6;
+  letter-spacing: 0.05em;
+  margin: 16px 0;
+}
+
+.logout-screen button {
+  margin-top: 24px;
+  padding: 12px 24px;
+  border: none;
+  border-radius: 10px;
+  background: #3b82f6;
+  color: #fff;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background 0.2s;
+}
+
+.logout-screen button:hover {
+  background: #2563eb;
+}

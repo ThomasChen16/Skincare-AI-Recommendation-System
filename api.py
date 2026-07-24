@@ -68,14 +68,37 @@ class SaveProfileRequest(BaseModel):
 # Login endpoint - creates or retrieves user profile
 @app.post("/login", response_model=LoginResponse)
 def login(request: LoginRequest):
-    # Login or create a new user profile using unique_id
-    profile = create_user_profile(request.unique_id, request.name)
     
-    return {
-        "unique_id": request.unique_id,
-        "name": profile["name"],
-        "profile": profile
-    }
+    # If unique_id is provided, try to login existing user
+    if request.unique_id:
+        profile = get_user_profile(request.unique_id, request.name)
+        
+        if profile:
+            # User found, return their profile
+            return {
+                "unique_id": request.unique_id,
+                "name": profile["name"],
+                "profile": profile
+            }
+        else:
+            # User not found, create new profile with provided unique_id
+            unique_id, new_profile = create_user_profile(request.name)
+            # Override the generated unique_id with the one provided
+            new_profile["unique_id_override"] = request.unique_id
+            return {
+                "unique_id": request.unique_id,
+                "name": new_profile["name"],
+                "profile": new_profile
+            }
+    else:
+        # No unique_id provided, create new account
+        unique_id, new_profile = create_user_profile(request.name)
+        
+        return {
+            "unique_id": unique_id,
+            "name": new_profile["name"],
+            "profile": new_profile
+        }
 
 # Logout endpoint - clears session (frontend should clear stored unique_id)
 @app.post("/logout")
@@ -188,7 +211,6 @@ def recommend(request: RecommendRequest):
     
     # format the inputs into context dictionary
     context = {
-        "time": request.time,
         "skin_type": request.skin_type,
         "concerns": request.concerns,
         "goals": request.goals
@@ -197,25 +219,39 @@ def recommend(request: RecommendRequest):
     # get faiss scores for the current context
     faiss_score = get_faiss_scores(context)
     
-    # build routine blueprint based on user profile and product rules
-    # blueprint determines how manny products of each type we should recommend based on user profile and product rules but does not specify which products yet
-    routine_blueprint = build_routine(context)
+    # Build routine blueprints for both AM and PM
+    am_context = {**context, "time": "a.m"}
+    pm_context = {**context, "time": "p.m"}
+    
+    am_blueprint = build_routine(am_context)
+    pm_blueprint = build_routine(pm_context)
 
     recommend_routine = []
     am_routine = []
     pm_routine = []
     
-    for product_type in routine_blueprint:
+    # Process AM routine blueprint
+    for product_type in am_blueprint:
         # for each product type in routine_blueprint get specific product recommendations
-        products = recommend_for_product_type(product_type["category"], context, faiss_score, product_type["count"])
+        products = recommend_for_product_type(product_type["category"], am_context, faiss_score, product_type["count"])
         
         # extend recommend_routine with products while avoiding duplicates
         recommend_routine.extend(products)
         
-        # Separate AM and PM routines
+        # Add to AM routine
         if product_type["time"] == "am":
             am_routine.extend(products)
-        elif product_type["time"] == "pm":
+    
+    # Process PM routine blueprint
+    for product_type in pm_blueprint:
+        # for each product type in routine_blueprint get specific product recommendations
+        products = recommend_for_product_type(product_type["category"], pm_context, faiss_score, product_type["count"])
+        
+        # extend recommend_routine with products while avoiding duplicates
+        recommend_routine.extend(products)
+        
+        # Add to PM routine
+        if product_type["time"] == "pm":
             pm_routine.extend(products)
     
     # If unique_id is provided, save the routine to their profile

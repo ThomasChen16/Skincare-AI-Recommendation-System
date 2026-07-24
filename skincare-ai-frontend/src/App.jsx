@@ -3,7 +3,7 @@ import ChatMessage from './components/ChatMessage'
 import ChatWindow from './components/ChatWindow'
 import RoutineDashboard from './components/RoutineDashboard'
 import LogoutScreen  from './components/LogoutScreen'
-import { useState, useEffect } from 'react' // how react switches between UI using useState and side effects tthat happen outside standard rendering flow using useEffect
+import { useState, useEffect, useRef } from 'react' // how react switches between UI using useState and side effects tthat happen outside standard rendering flow using useEffect
 
 const questions = [
   {key: 'skin_type', text: 'Tell me about your skin type. How would you describe it?'},
@@ -26,10 +26,21 @@ function App() {
   const [pmRoutine, setPmRoutine] = useState([]) // store user's pmRoutine
   const [error, setError] = useState(null)
   const [generatedId, setGeneratedId] = useState(null) // generate unique_id for new users
-
+  const [logoutUser, setLogoutUser] = useState(null) // store user data for logout screen
+  const profileLoadAttempted = useRef(false) // track if we've attempted to load profile
+  const currentStageRef = useRef(stage) // track current stage to avoid stale closures
+  
+  // Update the ref whenever stage changes
+  useEffect(() => {
+    currentStageRef.current = stage
+  }, [stage])
+  
   // handle login function
   async function handleLogin(data) {
     try {
+      // Reset profile load flag for new login session
+      profileLoadAttempted.current = false
+      
       let response;
       
       if (data.type === 'create') {
@@ -61,16 +72,27 @@ function App() {
       // read the response body and converts JSON to Javascript object
       const userData = await response.json()
 
+      // Clear all previous state
+      setMessages([{ sender: 'bot', text: questions[0].text }])
+      setStep(0)
+      setAnswers({})
+      setIsEditing(false)
+      setAnalyzed(null)
+      setAmRoutine([])
+      setPmRoutine([])
+      setGeneratedId(null)
+      setStage('login') // Reset stage so loadSavedProfile can transition to 'routine'
+      
       // set user state data
       setUser(userData)
 
       // If this was a create account, store the generated ID to display
       if (data.type === 'create') {
         setGeneratedId(userData.unique_id)
+        // set stage to 'asking' for new users
+        setStage('asking')
       }
-
-      // set stage to 'asking'
-      setStage('asking')
+      // For existing users, loadSavedProfile will set the appropriate stage
 
       // store user_id and user_name in localStorage
       localStorage.setItem('user_id', userData.unique_id)
@@ -85,23 +107,25 @@ function App() {
   async function logout() {
     try {
       // fetch() browser function to make HTTP request
-      await fetch('htpp://localhost:8000/logout', {
+      await fetch('http://localhost:8000/logout', {
         method: 'POST'
       })
 
       // Remove user_id and user_name from localStorage
-      localStorage.remove('user_id')
-      localStorage.remove('user_name')
+      localStorage.removeItem('user_id')
+      localStorage.removeItem('user_name')
+
+      // Store user data for logout screen before clearing
+      setLogoutUser(user)
 
       // set user state null
       setUser(null)
 
-      // pass the unique_id to logoutscreen
-
-      // set stage to 'login'
+      // set stage to 'logout'
       setStage('logout')
     } catch (error) {
       console.log('Logout failed', error)
+      setError('Logout failed. Please try again.')
     }
   }
 
@@ -139,8 +163,14 @@ function App() {
           setPmRoutine(data.profile.pm_routine)
         }
 
-        // set stage to 'routine'
-        setStage('routine')
+        // Only set stage to 'routine' if we're not already in the routine stage
+        // Use functional update to avoid stale closure issues
+        setStage((prevStage) => {
+          if (prevStage === 'login' || prevStage === 'asking') {
+            return 'routine'
+          }
+          return prevStage
+        })
       } else {
         console.log('No profile found or missing skin_type') // DEBUG
       }
@@ -166,11 +196,20 @@ function App() {
       })
     }
   }, [])
+  
+  // Reset profile load flag when user logs out
+  useEffect(() => {
+    if (!user) {
+      profileLoadAttempted.current = false
+    }
+  }, [user])
 
   // useEffect to load saved profile when user logs in
   useEffect(() => {
-    // if user exist, call loadSavedProfile
-    if (user) {
+    // Only load saved profile once per login session
+    // The profileLoadAttempted ref prevents multiple calls
+    if (user && !profileLoadAttempted.current) {
+      profileLoadAttempted.current = true
       loadSavedProfile().then(() => {
         console.log('Profile load completed') // DEBUG
       }).catch(err => {
@@ -366,15 +405,16 @@ function App() {
         </ChatWindow>
         </div>
       )}
-    </div>
 
-    //{stage==='logout' && (
-      //<div>
-        //<div>
-          //<span>Goodbye, {user?.name}</span>
-        //</div>
-      //</div>
-    //)}
+      {stage==='logout' && (
+        <LogoutScreen
+          setMode={setStage}
+          error={error}
+          unique_id={logoutUser?.unique_id}
+          name={logoutUser?.name}
+        />
+      )}
+    </div>
   )
 }
 

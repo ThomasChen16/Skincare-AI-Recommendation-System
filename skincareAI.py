@@ -4,6 +4,8 @@ import random # random number generator
 import json # for saving userProfile data
 import faiss # for faster similarity search
 import numpy as np
+import secrets # for unique_id generation
+from datetime import datetime # for showing date for user profile 
 
 # import functions from files
 from retrieve_skin_info import extract_semantics
@@ -46,11 +48,13 @@ class UserProfile:
     def __init__(self):
         self.unique_id = 0
         self.name = None
-        self.skin_type = []
+        self.skin_type = ""
         self.concerns = []
         self.goals = []
         self.am_routine = []
         self.pm_routine = []
+        self.created_at = None
+        self.updated_at = None
     
     
     def add_skin_type(self, skin_type, update=False):
@@ -75,7 +79,86 @@ class UserProfile:
            self.am_routine = routine
         elif time == "p.m":
             self.pm_routine = routine
+
+# JSON handling functions
+PROFILE_PATH = "data/profile.json"
+
+# load user profiles from profile.json
+def load_profiles():
+    try:
+        # open and read profile.json
+        with open(PROFILE_PATH, "r") as f:
+            return json.load(f)
+    except (FileNotFoundError, json.JSONDecodeError):
+        return {"users": {}}
+
+# save user profile into profile.json
+def save_profiles(profiles):
+    with open(PROFILE_PATH, "w") as f:
+        json.dump(profiles, f, indent=4)
+
+# generate unique_id for user
+def generate_unique_id():
+    profiles = load_profiles()
+    
+    while True:
+        new_id = secrets.token_hex(5) # 10-character hex string
         
+        # check if this unique_id already exists
+        if new_id not in profiles.get("users", {}):
+            return new_id
+
+# retrieve user data from profile.json
+def get_user_profile(unique_id, name):
+    profiles = load_profiles()
+    user = profiles.get("users", {}).get(unique_id)
+    
+    if user is None:
+        return None
+    
+    # second authentication, name and unique_id must match
+    if user.get("name", "").lower() != name.lower():
+        return None
+    
+    return user
+
+# create new profile for new users
+def create_user_profile(name):
+    profiles = load_profiles()
+    unique_id = generate_unique_id()
+    
+    new_profile = {
+        "name": name,
+        "skin_type": "",
+        "concerns": [],
+        "goals": [],
+        "am_routine": [],
+        "pm_routine": [],
+        "created_at": datetime.now().isoformat(),
+        "last_updated": datetime.now().isoformat()
+    }
+    
+    # properly save the new profile
+    if "users" not in profiles:
+        profiles["users"] = {}
+    profiles["users"][unique_id] = new_profile
+    save_profiles(profiles)
+    
+    return unique_id, new_profile
+
+# update user profile and last_updated
+def update_user_profile(unique_id, updates: dict):
+    profiles = load_profiles()
+    
+    if unique_id not in profiles.get("users", {}):
+        return None
+    
+    profiles["users"][unique_id].update(updates)
+    profiles["users"][unique_id]["last_updated"] = datetime.now().isoformat()
+    
+    return profiles["users"][unique_id]
+    
+  
 
 # Function to determine what to ask next based on missing info one at a time in user profile
 def what_to_ask_next(user_profile):
@@ -169,7 +252,7 @@ def have_conversation():
     # edge case: if file does not exist create it with empty user data
     # edge case: if file is empty we should also handle that and create empty user data
     try:
-        with open("profile.json", "r") as f:
+        with open("data/profile.json", "r") as f:
             existing_data = json.load(f)
     except (FileNotFoundError, json.JSONDecodeError):
         existing_data = {"users": {}}
@@ -291,7 +374,7 @@ def have_conversation():
     # Re-adjustsment and Routine Loop    
     while True:
         print("\nWould you like to:")
-        print("1. Satifisited with skincare information and move on to the routine")
+        print("1. Move on to the routine")
         print("2. Adjust detected skin type")
         print("3. Adjust detected skin concerns")
         print("4. Adjust detected skin goals")
@@ -378,7 +461,7 @@ def have_conversation():
             existing_data["users"][str(user_profile.unique_id)] = data
             
             # write data back to json file
-            with open("profile.json", "w") as f:
+            with open("data/profile.json", "w") as f:
                 json.dump(existing_data, f, indent=4)
             break
 

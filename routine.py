@@ -87,10 +87,19 @@ def build_routine(context):
             else:
                 count = 0
         
+        # determine time for this product type
+        if rules.get("require_am"):
+            time = "am"
+        elif context["time"] == "p.m":
+            time = "pm"
+        else:
+            time = "am"
+        
         plan.append({
             "category": product_type,
             "count": count,
-            "order": rules.get("order", 999) # default order is 999 if not specified
+            "order": rules.get("order", 999), # default order is 999 if not specified
+            "time": time
         })
 
     # sort plan by order
