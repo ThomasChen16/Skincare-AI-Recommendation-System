@@ -121,6 +121,9 @@ function App() {
       // set user state null
       setUser(null)
 
+      // Reset generatedId to show login form instead of success message
+      setGeneratedId(null)
+
       // set stage to 'logout'
       setStage('logout')
     } catch (error) {

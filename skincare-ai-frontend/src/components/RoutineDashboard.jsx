@@ -44,16 +44,16 @@ function RoutineDashboard({ profile, onEditProfile, amRoutine, pmRoutine, onGene
 
       {(amRoutine && amRoutine.length > 0) || (pmRoutine && pmRoutine.length > 0) ? (
         <div className='routines-container'>
-          {amRoutine && amRoutine.length > 0 && (
+      {amRoutine && amRoutine.length > 0 && (
             <div className='routine-section'>
-              <h3>Morning Routine (AM)</h3>
+              <h3>Morning Routine</h3>
               <div className='routine-list'>
                 {amRoutine.map((product, index) => (
                   <div key={index} className='product-card'>
                     <h4>{product.product}</h4>
-                    <p>Type: {product.type}</p>
-                    <p>Score: {product.score}</p>
-                    <p>Why this product: {product.reason}</p>
+                    <p><strong>Type:</strong> {product.type}</p>
+                    <p><strong>Score:</strong> {product.score}</p>
+                    <p><strong>Why this product:</strong> {product.reason}</p>
                   </div>
                 ))}
               </div>
@@ -62,14 +62,14 @@ function RoutineDashboard({ profile, onEditProfile, amRoutine, pmRoutine, onGene
 
           {pmRoutine && pmRoutine.length > 0 && (
             <div className='routine-section'>
-              <h3>Evening Routine (PM)</h3>
+              <h3>Evening Routine</h3>
               <div className='routine-list'>
                 {pmRoutine.map((product, index) => (
                   <div key={index} className='product-card'>
                     <h4>{product.product}</h4>
-                    <p>Type: {product.type}</p>
-                    <p>Score: {product.score}</p>
-                    <p>Why this product: {product.reason}</p>
+                    <p><strong>Type:</strong> {product.type}</p>
+                    <p><strong>Score:</strong> {product.score}</p>
+                    <p><strong>Why this product:</strong> {product.reason}</p>
                   </div>
                 ))}
               </div>
