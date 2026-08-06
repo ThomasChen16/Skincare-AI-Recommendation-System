@@ -255,6 +255,7 @@ function App() {
     if (isEditing) {
       // only answer one field and go straight to 'results' stage
       setIsEditing(false) // reset
+      setMessages([...messages, userMessage]) // add user's message before analyzing
       await callAnalyze(newAnswers) // call callAnalyze for the new user input and output there
       return
     }
