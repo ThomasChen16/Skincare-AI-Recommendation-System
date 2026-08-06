@@ -146,19 +146,28 @@ function App() {
       
       console.log('Profile data loaded:', data) // DEBUG
 
-      // check if profile exists and has skin_type
-      if (data.profile && data.profile.skin_type) {
-        // set analyzed state with saved profile data
-        setAnalyzed({
-          skin_type: data.profile.skin_type,
-          concerns: data.profile.concerns,
-          goals: data.profile.goals
-        })
+      // check if this account has a saved profile at all
+      if (data.profile) {
+        // determine whether the profile has meaningful saved data
+        const hasAnalysis = Boolean(data.profile.skin_type) ||
+          (data.profile.concerns && data.profile.concerns.length) ||
+          (data.profile.goals && data.profile.goals.length)
+        const hasRoutine = (data.profile.am_routine && data.profile.am_routine.length) ||
+          (data.profile.pm_routine && data.profile.pm_routine.length)
+
+        // load saved analysis if it exists
+        if (hasAnalysis) {
+          setAnalyzed({
+            skin_type: data.profile.skin_type,
+            concerns: data.profile.concerns,
+            goals: data.profile.goals
+          })
+        }
 
         // load saved routines if they exist
         console.log('AM routine from profile:', data.profile.am_routine) // DEBUG
         console.log('PM routine from profile:', data.profile.pm_routine) // DEBUG
-        
+
         if (data.profile.am_routine) {
           setAmRoutine(data.profile.am_routine)
         }
@@ -166,16 +175,17 @@ function App() {
           setPmRoutine(data.profile.pm_routine)
         }
 
-        // Only set stage to 'routine' if we're not already in the routine stage
-        // Use functional update to avoid stale closure issues
+        // Progress out of the login screen. Go to 'routine' if the account has
+        // saved analysis/routines, otherwise go to 'asking' so the user can
+        // complete their profile. Never leave the user stuck at login.
         setStage((prevStage) => {
           if (prevStage === 'login' || prevStage === 'asking') {
-            return 'routine'
+            return (hasAnalysis || hasRoutine) ? 'routine' : 'asking'
           }
           return prevStage
         })
       } else {
-        console.log('No profile found or missing skin_type') // DEBUG
+        console.log('No profile found for this id:', user.unique_id) // DEBUG
       }
     } catch (error) {
       console.log('Failed to load profile:', error)
