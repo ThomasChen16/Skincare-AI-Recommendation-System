@@ -29,6 +29,7 @@ function App() {
   const [logoutUser, setLogoutUser] = useState(null) // store user data for logout screen
   const profileLoadAttempted = useRef(false) // track if we've attempted to load profile
   const currentStageRef = useRef(stage) // track current stage to avoid stale closures
+  const [feedbackMap, setFeedbackMap] = useState({}) // track feedback for each product
   
   // Update the ref whenever stage changes
   useEffect(() => {
@@ -376,6 +377,35 @@ function App() {
     }
   }
 
+  // handle feedback for a product
+  async function handleFeedback(product, rating, routineTime) {
+    if (!user || !user.unique_id) {
+      console.error("No user profile found. Cannot submit feedback.")
+      return
+    }
+
+    // update feedback map for UI
+    const key = product.product // use product name as key
+    setFeedbackMap(prev => ({ ...prev, [key]: rating }))
+
+    try {
+      await fetch("http://localhost:8000/feedback", {
+        method: "POST",
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          unique_id: user.unique_id,
+          product: product.product,
+          product_type: product.product_type,
+          rating: rating == 'up' ? 'upvote' : 'downvote',
+          routine_time: routineTime
+        })
+      })
+    } catch (error) {
+      setFeedbackMap(prev => ({ ...prev, [key]: null }))
+    }
+  }
+
+
   return (
     <div className="app">
       <h1>Skin assistant</h1>
@@ -402,6 +432,8 @@ function App() {
             amRoutine={amRoutine}
             pmRoutine={pmRoutine}
             onGenerateRoutine={generateRoutine}
+            onFeedback={handleFeedback}
+            feedbackMap={feedbackMap}
           />
         </div>
       )}
