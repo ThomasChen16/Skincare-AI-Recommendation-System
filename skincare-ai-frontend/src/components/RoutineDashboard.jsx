@@ -1,7 +1,8 @@
 // design for displaying routine with buttons for morning and night after finishing chat function
 import { useState, useEffect } from 'react'
+import FeedbackButtons from './FeedbackButtons'
 
-function RoutineDashboard({ profile, onEditProfile, amRoutine, pmRoutine, onGenerateRoutine, onFeedback, feedbackMap }) {
+function RoutineDashboard({ profile, onEditProfile, amRoutine, pmRoutine, onGenerateRoutine, onFeedback, feedbackMap, user }) {
     // local state for AM/PM routines
     const [loading, setLoading] = useState(false)
     const [error, setError] = useState(null)
@@ -25,10 +26,16 @@ function RoutineDashboard({ profile, onEditProfile, amRoutine, pmRoutine, onGene
       <div className="routine-dashboard">
           <div className="profile-summary">
               <h2>Your skin profile</h2>
-              <p><strong>Skin Type:</strong> {profile.skin_type}</p>
-              <p><strong>Concerns:</strong> {profile.concerns.join(', ')}</p>
-              <p><strong>Goals:</strong> {profile.goals.join(', ')}</p>
-              <button onClick={onEditProfile}>Edit Profile</button>
+              {profile ? (
+                <>
+                  <p><strong>Skin Type:</strong> {profile.skin_type}</p>
+                  <p><strong>Concerns:</strong> {profile.concerns?.join(', ') || 'None'}</p>
+                  <p><strong>Goals:</strong> {profile.goals?.join(', ') || 'None'}</p>
+                  <button onClick={onEditProfile}>Edit Profile</button>
+                </>
+              ) : (
+                <p>Loading profile...</p>
+              )}
           </div>
 
       {saved && (
@@ -54,24 +61,13 @@ function RoutineDashboard({ profile, onEditProfile, amRoutine, pmRoutine, onGene
                     <p><strong>Type:</strong> {product.type}</p>
                     <p><strong>Score:</strong> {product.score}</p>
                     <p><strong>Why this product:</strong> {product.reason}</p>
-                    <div className='product-feedback'>
-                      <button
-                        type='button'
-                        className={`feedback-btn ${feedbackMap[product.product] === 'up' ? 'active' : ''}`}
-                        onClick={() => onFeedback(product.product, 'up')}
-                        aria-label='Thumbs Up'
-                      >
-                        👍
-                      </button>
-                      <button
-                        type='button'
-                        className={`feedback-btn ${feedbackMap[product.product] === 'down' ? 'active' : ''}`}
-                        onClick={() => onFeedback(product.product, 'down')}
-                        aria-label='Thumbs Down'
-                      >
-                        👎
-                      </button>
-                    </div>
+                    <FeedbackButtons
+                      product={product}
+                      routineTime='am'
+                      user={user}
+                      currentFeedback={feedbackMap[product.product]}
+                      onFeedback={onFeedback}
+                    />
                   </div>
                 ))}
               </div>
@@ -88,24 +84,13 @@ function RoutineDashboard({ profile, onEditProfile, amRoutine, pmRoutine, onGene
                     <p><strong>Type:</strong> {product.type}</p>
                     <p><strong>Score:</strong> {product.score}</p>
                     <p><strong>Why this product:</strong> {product.reason}</p>
-                    <div className='product-feedback'>
-                      <button
-                        type='button'
-                        className={`feedback-btn ${feedbackMap[product.product] === 'up' ? 'active' : ''}`}
-                        onClick={() => onFeedback(product.product, 'up')}
-                        aria-label='Thumbs Up'
-                      >
-                        👍
-                      </button>
-                      <button
-                        type='button'
-                        className={`feedback-btn ${feedbackMap[product.product] === 'down' ? 'active' : ''}`}
-                        onClick={() => onFeedback(product.product, 'down')}
-                        aria-label='Thumbs Down'
-                      >
-                        👎
-                      </button>
-                    </div>
+                    <FeedbackButtons
+                      product={product}
+                      routineTime='pm'
+                      user={user}
+                      currentFeedback={feedbackMap[product.product]}
+                      onFeedback={onFeedback}
+                    />
                   </div>
                 ))}
               </div>

@@ -324,7 +324,7 @@ function App() {
           skin_text: rawAnswers.skin_type,
           concerns_text: rawAnswers.concerns,
           goals_text: rawAnswers.goals,
-          user_id: user?.user_id
+          unique_id: user?.unique_id
         }),
       })
 
@@ -434,6 +434,7 @@ function App() {
             onGenerateRoutine={generateRoutine}
             onFeedback={handleFeedback}
             feedbackMap={feedbackMap}
+            user={user}
           />
         </div>
       )}
