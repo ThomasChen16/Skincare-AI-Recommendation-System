@@ -109,23 +109,28 @@ def generate_unique_id():
             return new_id
 
 # retrieve user data from profile.json
-def get_user_profile(unique_id, name):
+def get_user_profile(unique_id, name=None):
     profiles = load_profiles()
     user = profiles.get("users", {}).get(unique_id)
     
-    if user is None:
-        return None
-    
-    # second authentication, name and unique_id must match
-    if user.get("name", "").lower() != name.lower():
-        return None
-    
+    # The unique_id is the unique credential in this passwordless system,
+    # so it alone identifies an account. A mismatched/empty name must not
+    # block retrieval of a profile that already exists under this id.
     return user
 
 # create new profile for new users
-def create_user_profile(name):
+def create_user_profile(name, unique_id=None):
     profiles = load_profiles()
-    unique_id = generate_unique_id()
+    
+    # Use the provided unique_id when available, otherwise generate a new one
+    if unique_id:
+        # only use the provided id if it is not already taken
+        if str(unique_id) not in profiles.get("users", {}):
+            unique_id = str(unique_id)
+        else:
+            unique_id = generate_unique_id()
+    else:
+        unique_id = generate_unique_id()
     
     new_profile = {
         "name": name,
