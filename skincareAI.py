@@ -20,6 +20,8 @@ from routine import build_routine
 
 from embedding_model import load_model
 
+from database import get_connection
+
 # read json file
 #with open("profile.json", "r") as f:
 #    data = json.load(f)
@@ -471,4 +473,20 @@ def have_conversation():
             break
 
 
+# save feedback of products when displaying routine
+def save_feedback(unique_id, product, product_type, rating, routine_time):
+    # connect to database
+    conn = get_connection()
     
+    # cursor to write SQL commands
+    cursor = conn.cursor()
+    
+    # insert feedback into feedback table
+    cursor.execute("""
+        INSERT INTO feedback (unique_id, product, product_type, rating, routine_time)
+        VALUES (?, ?, ?, ?, ?)
+    """, (unique_id, product, product_type, rating, routine_time))
+    
+    # save and close
+    conn.commit()
+    conn.close()

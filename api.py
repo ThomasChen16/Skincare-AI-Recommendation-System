@@ -1,4 +1,5 @@
 from fastapi import FastAPI
+from fastapi import HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from embedding_model import load_model
 from pydantic import BaseModel
@@ -11,6 +12,8 @@ from retrieve_skin_info import extract_semantics, get_reference_embeddings, get_
 from product_recommendation import get_faiss_scores, recommend_for_product_type
 from routine import build_routine
 from skincareAI import load_profiles, save_profiles, get_user_profile, create_user_profile, update_user_profile
+from skincareAI import save_feedback
+from database import init_db
 
 
 # Initialize the FastAPI application
@@ -43,6 +46,8 @@ def startup():
     get_reference_embeddings()
     # load the FAISS index when the API starts
     get_faiss_index()
+    # get access to database when the API starts
+    init_db()
 
 # Define request/response models for authentication
 class LoginRequest(BaseModel):
@@ -271,4 +276,31 @@ def recommend(request: RecommendRequest):
         "pm_routine": pm_routine,
         "saved": saved
     }
+
+# Define the request model for the feedback endpoint
+# Define the data the API expects to receive from the frontend
+# Pydantic model
+class FeedbackRequest(BaseModel):
+    unique_id: str
+    product: str
+    product_type: str
+    rating: str
+    routine_time: str
     
+# Define the feedback endpoint to process user feedback on products
+@app.post("/feedback")
+def submit_feedback(request: FeedbackRequest):
+    
+    # validate rating in upvote or downvote format and routime_time in am or pm format
+    if request.rating not in ["upvote", "downvote"]:
+        raise HTTPException(status_code=400, detail="Invalid rating. Must be 'upvote' or 'downvote'")
+    
+    if request.routine_time not in ["a.m", "p.m"]:
+        raise HTTPException(status_code=400, detail="Invalid routine time. Must be 'a.m' or 'p.m'")
+    
+    # Append the new entry    
+    save_feedback(request.unique_id, request.product, request.product_type, request.rating,  request.routine_time)
+    
+    return {"message": "Feedback submitted successfully"}
+
+
