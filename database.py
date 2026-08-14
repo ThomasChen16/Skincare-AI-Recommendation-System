@@ -40,7 +40,7 @@ def init_db():
     # Create table to hold user profile data
     cursor.execute("""
         CREATE TABLE IF NOT EXISTS profile (
-            unqiue_id TEXT PRIMARY KEY,
+            unique_id TEXT PRIMARY KEY,
             name TEXT NOT NULL,
             skin_type TEXT,
             concerns TEXT,

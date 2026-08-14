@@ -408,7 +408,7 @@ function App() {
 
   return (
     <div className="app">
-      <h1>Skin assistant</h1>
+      {stage !== 'login' && <h1>Skin assistant</h1>}
 
       {stage == 'login' && (
         <LoginScreen 
