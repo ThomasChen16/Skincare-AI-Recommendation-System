@@ -19,30 +19,44 @@ def get_connection():
 
 def init_db():
     # Establishes connection to SQLite database and access to columns by name
-    conn = get_connection
-    
+    conn = get_connection()
+
     # Pen that writes SQL commands to the database
     cursor = conn.cursor()
-    
-    # Create table to hold user's profile data
+
+    # Create table to hold feedback data
     cursor.execute("""
-        CREATE TABLE IF NOT EXIST feedback (
-            id              INTEGER     AUTOINCREMENT,
-            unique_id       TEXT        NOT NULL,
-            product         TEXT        NOT NULL,
-            product_type    TEXT,
-            rating          TEXT        NOT NULL,
-            routine_time    TEXT,
-            created_at      TEXT        DEFAULT CURRENT_TIMESTAMP,
-            PRIMARY KEY (id)
+        CREATE TABLE IF NOT EXISTS feedback (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            unique_id TEXT NOT NULL,
+            product TEXT NOT NULL,
+            product_type TEXT,
+            rating TEXT NOT NULL,
+            routine_time TEXT,
+            created_at TEXT DEFAULT CURRENT_TIMESTAMP
         )
     """)
-    
+
+    # Create table to hold user profile data
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS profile (
+            unqiue_id TEXT PRIMARY KEY,
+            name TEXT NOT NULL,
+            skin_type TEXT,
+            concerns TEXT,
+            goals TEXT,
+            am_routine TEXT,
+            pm_routine TEXT,
+            created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+            last_updated TEXT DEFAULT CURRENT_TIMESTAMP
+        )
+    """)
+
     # save changes and close connection
     conn.commit()
-    
+
     conn.close()
     
-    
+
     
     

@@ -11,8 +11,7 @@ from datetime import datetime
 from retrieve_skin_info import extract_semantics, get_reference_embeddings, get_faiss_index
 from product_recommendation import get_faiss_scores, recommend_for_product_type
 from routine import build_routine
-from skincareAI import load_profiles, save_profiles, get_user_profile, create_user_profile, update_user_profile
-from skincareAI import save_feedback
+from skincareAI import load_profiles, save_profiles, get_user_profile, create_user_profile, update_user_profile, save_feedback
 from database import init_db
 
 

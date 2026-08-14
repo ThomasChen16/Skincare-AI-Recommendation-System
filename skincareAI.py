@@ -101,23 +101,39 @@ def save_profiles(profiles):
 
 # generate unique_id for user
 def generate_unique_id():
+    # connect to database
+    conn = get_connection()
     profiles = load_profiles()
     
     while True:
         new_id = secrets.token_hex(5) # 10-character hex string
         
         # check if this unique_id already exists
-        if new_id not in profiles.get("users", {}):
+        existing = conn.execute("SELECT unique_id FROM profile WHERE unique_id = ?", (new_id,)).fetchone()
+        if not existing:
+            conn.close()
             return new_id
 
 # retrieve user data from profile.json
 def get_user_profile(unique_id, name=None):
-    profiles = load_profiles()
-    user = profiles.get("users", {}).get(unique_id)
+    # connect to database
+    conn = get_connection()
     
-    # The unique_id is the unique credential in this passwordless system,
-    # so it alone identifies an account. A mismatched/empty name must not
-    # block retrieval of a profile that already exists under this id.
+    # get user profile based on unique_id
+    row = conn.execute("SELECT * FROM profiles WHERE unique_id = ?", (unique_id,)).fetchone()
+    conn.close()
+    
+    # if profile doesn't exist return None
+    if row is None:
+        return None
+    
+    # format the data back turning the strings "[]" back to list []
+    user = dict(row)
+    user["concerns"] = json.loads(user["concerns"])
+    user["goals"] = json.loads(user["goals"])
+    user["am_routine"] = json.loads(user["am_routine"])
+    user["pm_routine"] = json.loads(user["pm_routine"])
+    
     return user
 
 # create new profile for new users
@@ -127,12 +143,20 @@ def create_user_profile(name, unique_id=None):
     # Use the provided unique_id when available, otherwise generate a new one
     if unique_id:
         # only use the provided id if it is not already taken
-        if str(unique_id) not in profiles.get("users", {}):
-            unique_id = str(unique_id)
-        else:
+        # connect to database
+        conn = get_connection()
+        # select unique_id from profile table
+        existing = conn.execute("SELECT unique_id FROM profiles WHERE unique_id=?", (unique_id,)).fetchone()
+        # close database
+        conn.close()
+        # if able to successfull grab unique_id generate unique_id
+        if existing:
             unique_id = generate_unique_id()
     else:
         unique_id = generate_unique_id()
+        
+    unique_id = str(unique_id)
+    now = datetime.now().isoformat()
     
     new_profile = {
         "name": name,
@@ -141,15 +165,26 @@ def create_user_profile(name, unique_id=None):
         "goals": [],
         "am_routine": [],
         "pm_routine": [],
-        "created_at": datetime.now().isoformat(),
-        "last_updated": datetime.now().isoformat()
+        "created_at": now,
+        "last_updated": now
     }
     
-    # properly save the new profile
-    if "users" not in profiles:
-        profiles["users"] = {}
-    profiles["users"][unique_id] = new_profile
-    save_profiles(profiles)
+    # save the new profile
+    # connect to database
+    conn = get_connection()
+    # insert default placeholder data into table
+    conn.execute("""
+        INSERT INTO profiles (unique_id, name, skin_type, concerns, goals, am_routine, pm_routine, created_at, last_updated)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+    """, (
+        unique_id, name, "",
+        json.dumps([]), json.dumps([]), json.dumps([]), json.dumps([]), # convers the Python list [] into string "[]" since thats what gets stored in a TEXT column
+        now, now
+    ))
+    
+    # save and close
+    conn.commit()
+    conn.close()
     
     return unique_id, new_profile
 
