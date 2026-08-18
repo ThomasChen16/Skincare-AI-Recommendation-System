@@ -5,8 +5,13 @@ function ChatMessage({ sender, text}) {
     // template for building a string like 'message message-bot'
     // condition ? picks which extra class to add to the message div
     return (
-        <div className={`message ${isBot ? 'message-bot' : 'message-user'}`}>
-            {text}
+        <div className={`message-row ${isBot ? 'row-bot' : 'row-user'}`}>
+            {isBot && (
+                <img className="message-avatar" src="/pictures/skin-bot.jpg" alt="Assistant" />
+            )}
+            <div className={`message ${isBot ? 'message-bot' : 'message-user'}`}>
+                {text}
+            </div>
         </div>
     )
 }

@@ -35,8 +35,18 @@ function LoginScreen({ onLogin, mode, setMode, error, generatedId }) {
     // Javascript object
     return (
         <div className="login-screen">
-            <h1>Welcome to Skin Assistant</h1>
-            
+            <div className="login-layout">
+                {/* Hero panel with photo */}
+                <div className="login-hero">
+                    <img src="/pictures/skincare-pic1.jpg" alt="Skincare products" />
+                    <div className="login-hero-overlay">
+                        <h1>Welcome to Skin Assistant</h1>
+                        <p>Personalized skincare routines, powered by AI. Share your skin type, concerns and goals and we'll build a routine just for you.</p>
+                    </div>
+                </div>
+
+                {/* Form panel */}
+                <div className="login-panel">
             {!generatedId ? (
                 <>
                     {/* Toggle between login and create account */}
@@ -108,6 +118,8 @@ function LoginScreen({ onLogin, mode, setMode, error, generatedId }) {
                     <p className="save-hint">Save this ID to access your profile later</p>
                 </div>
             )}
+                </div>
+            </div>
         </div>
     )
 }

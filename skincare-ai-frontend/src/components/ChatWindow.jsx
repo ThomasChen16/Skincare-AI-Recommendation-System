@@ -15,6 +15,14 @@ function ChatWindow({ children, onSend }) {
 
     return (
         <div className="chat-window">
+            <div className="chat-banner">
+                <img src="/pictures/skin-banner.jpg" alt="Skincare products" />
+                <div className="chat-banner-overlay">
+                    <span className="chat-banner-badge">AI Skin Assistant</span>
+                    <h2>Let's build your skincare routine</h2>
+                    <p>Answer a few quick questions to get personalized product recommendations.</p>
+                </div>
+            </div>
             <div className="chat-messages">
                 {children}
                 <div ref={messagesEndRef} />

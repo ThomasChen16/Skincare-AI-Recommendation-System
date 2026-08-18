@@ -24,6 +24,16 @@ function RoutineDashboard({ profile, onEditProfile, amRoutine, pmRoutine, onGene
     // Javascript object
     return (
       <div className="routine-dashboard">
+          {/* Photo banner */}
+          <div className="routine-banner">
+            <img src="/pictures/skincare-pic3.jpg" alt="Skincare products" />
+            <div className="routine-banner-overlay">
+              <span className="routine-banner-badge">Your Routine</span>
+              <h2>Personalized for your skin</h2>
+              <p>Curated products matched to your skin type, concerns and goals</p>
+            </div>
+          </div>
+
           <div className="profile-summary">
               <h2>Your skin profile</h2>
               {profile ? (
