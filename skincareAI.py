@@ -35,6 +35,7 @@ from database import get_connection
 
 # exit virtual environment: deactivate
 # re-enter virtual environment: venv\Scripts\activate
+# enter api: uvicorn api:app --reload
 # check to see if you are in the right environment: python -c "import sys; print(sys.executable)"
 
 from sentence_transformers import SentenceTransformer, util
@@ -120,7 +121,7 @@ def get_user_profile(unique_id, name=None):
     conn = get_connection()
     
     # get user profile based on unique_id
-    row = conn.execute("SELECT * FROM profiles WHERE unique_id = ?", (unique_id,)).fetchone()
+    row = conn.execute("SELECT * FROM profile WHERE unique_id = ?", (unique_id,)).fetchone()
     conn.close()
     
     # if profile doesn't exist return None
@@ -146,7 +147,7 @@ def create_user_profile(name, unique_id=None):
         # connect to database
         conn = get_connection()
         # select unique_id from profile table
-        existing = conn.execute("SELECT unique_id FROM profiles WHERE unique_id=?", (unique_id,)).fetchone()
+        existing = conn.execute("SELECT unique_id FROM profile WHERE unique_id=?", (unique_id,)).fetchone()
         # close database
         conn.close()
         # if able to successfull grab unique_id generate unique_id
@@ -174,7 +175,7 @@ def create_user_profile(name, unique_id=None):
     conn = get_connection()
     # insert default placeholder data into table
     conn.execute("""
-        INSERT INTO profiles (unique_id, name, skin_type, concerns, goals, am_routine, pm_routine, created_at, last_updated)
+        INSERT INTO profile (unique_id, name, skin_type, concerns, goals, am_routine, pm_routine, created_at, last_updated)
         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
     """, (
         unique_id, name, "",
@@ -190,15 +191,45 @@ def create_user_profile(name, unique_id=None):
 
 # update user profile and last_updated
 def update_user_profile(unique_id, updates: dict):
-    profiles = load_profiles()
+    # connect to database
+    conn = get_connection()
     
-    if unique_id not in profiles.get("users", {}):
+    # check if user exists
+    existing = conn.execute("SELECT unique_id FROM profile WHERE unique_id = ?", (unique_id,)).fetchone()
+    if not existing:
+        conn.close()
         return None
     
-    profiles["users"][unique_id].update(updates)
-    profiles["users"][unique_id]["last_updated"] = datetime.now().isoformat()
+    # Build the update query dynamically based on provided updates
+    allowed_fields = ['skin_type', 'concerns', 'goals', 'am_routine', 'pm_routine']
+    update_fields = []
+    update_values = []
     
-    return profiles["users"][unique_id]
+    for field, value in updates.items():
+        if field in allowed_fields:
+            # Convert lists to JSON strings for storage
+            if isinstance(value, list):
+                value = json.dumps(value)
+            update_fields.append(f"{field} = ?")
+            update_values.append(value)
+    
+    # Always update last_updated timestamp
+    update_fields.append("last_updated = ?")
+    update_values.append(datetime.now().isoformat())
+    
+    # Execute the update
+    update_values.append(unique_id)  # for WHERE clause
+    conn.execute(f"""
+        UPDATE profile 
+        SET {', '.join(update_fields)}
+        WHERE unique_id = ?
+    """, update_values)
+    
+    conn.commit()
+    conn.close()
+    
+    # Return the updated profile
+    return get_user_profile(unique_id)
     
   
 

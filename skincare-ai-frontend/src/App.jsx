@@ -21,6 +21,7 @@ function App() {
   const [stage, setStage] = useState('login') // track the current state of the conversation: 'login', 'asking', 'results' or 'routine'
   const [isEditing, setIsEditing] = useState(false) // track if user is editing their answers
   const [analyzed, setAnalyzed] = useState(null) // track whether the user input is being analyzed
+  const [pendingField, setPendingField] = useState(null) // field waiting for the user's next clarification
   const [loginMode, setLoginMode] = useState('login') // 'login' or 'create'
   const [amRoutine, setAmRoutine] = useState([]) // store user's amRoutine
   const [pmRoutine, setPmRoutine] = useState([]) // store user's pmRoutine
@@ -30,6 +31,7 @@ function App() {
   const profileLoadAttempted = useRef(false) // track if we've attempted to load profile
   const currentStageRef = useRef(stage) // track current stage to avoid stale closures
   const [feedbackMap, setFeedbackMap] = useState({}) // track feedback for each product
+  const [retryCounts, setRetryCounts] = useState({}) // track the number of attempts in retry followup questions
   
   // Update the ref whenever stage changes
   useEffect(() => {
@@ -246,6 +248,18 @@ function App() {
       return
     }
 
+    // If the user is answering a previously missing field, treat this as a re-analysis trigger.
+    if (pendingField) {
+      const field = pendingField
+      setPendingField(null)
+
+      const retryAnswers = { ...answers, [field]: text }
+      setAnswers(retryAnswers)
+      setMessages((prev) => [...prev, { sender: 'user', text }])
+      await callAnalyze(retryAnswers, field)
+      return
+    }
+
     const currentQuestion = questions[step]
     // add user's message, save their answer
     const userMessage = { sender: 'user', text }
@@ -277,18 +291,38 @@ function App() {
 
   }
 
+  // handle to follow up questions when fields (skin_type, concerns, goals) return empty
+  function followUpQuestions(field, text) {
+    // holds followup dialog
+    const followUpMessageMap = {
+      skin_type: 'I couldn\'t quite detect your skin type from that. Can you tell me more about your skin? For example, is it oily, dry, or a mix of both?',
+      concerns: 'Can you tell me more about specific skin concerns you\'re hoping to address? For example, would it be acne, aging, sensitivity, or something else?',
+      goals: 'Can you tell me more about your main skincare goals? Do you hope to improve hydration, reduce wrinkles, or something else?'
+    }
+
+    const botMessage = { sender: 'bot', text: followUpMessageMap[field] || 'Can you tell me a little more?' }
+
+    setMessages((prev) => [...prev, botMessage])
+    setPendingField(field)
+
+    if (text) {
+      setAnswers((prev) => ({ ...prev, [field]: text }))
+    }
+  }
+
+
   // handle the response when the user is in the 'results' stage
   function handleResultsResponse(text) {
     if (text.toLowerCase().includes('change')) {
       // if the user wants to change their answers, ask which question they want to change and reset the step to that question
       const botMessage = { sender: 'bot', text: 'Sure - which question would you like to change? (skin_type, concerns, goals)' }
-      setMessages([...messages, botMessage])
+      setMessages([...messages, {sender: 'user', text }, botMessage])
       setStage('awaiting_change_field') // change to 'awaiting_change_field' stage
 
     } else if (text.toLowerCase().includes('routine')) {
       // transition to next stage routine with new UI
       const botMessage = { sender: 'bot', text: 'Great! Taking you to your routine dashboard.' }
-      setMessages([...messages, botMessage])
+      setMessages([...messages, { sender: 'user', text}, botMessage])
       setStage('routine')
 
     } else {
@@ -315,7 +349,7 @@ function App() {
   }
 
   // analzye the user's answers by calling the backend API and display the results
-  async function callAnalyze(rawAnswers) {
+  async function callAnalyze(rawAnswers, answeredField) {
     try {
       const response = await fetch("http://localhost:8000/analyze", {
         method: "POST",
@@ -330,7 +364,33 @@ function App() {
 
       // display analyzed results
       const data = await response.json()
+      const MAX_RETRIES = 3
+
+      const missingFields = Array.isArray(data?.missing_categories) ? data.missing_categories : []
+
+      // if field is missing we call followUpQuestion rather than jumping to result stage
+      if (missingFields.length > 0) {
+        // first misisng field that still has attempts left
+        const fieldToAsk = missingFields.find((f) => (retryCounts[f] || 0) < MAX_RETRIES)
+
+        // iif there are empty fields or attempts left
+        if (fieldToAsk) {
+          // the field the user just answer hit 3 tries and still missing
+          if (answeredField && (retryCounts[answeredField] || 0) >= MAX_RETRIES && missingFields.includes(answeredField)) {
+            setMessages((prev) => [...prev, { sender: 'bot', text: 'No worries, we\'ll move on with what we have.' }])
+          }
+          
+          // update retrycounts
+          setRetryCounts((prev) => ({ ...prev, [fieldToAsk]: (prev[fieldToAsk] || 0) + 1 }))
+          // call followup question
+          followUpQuestions(fieldToAsk, rawAnswers[fieldToAsk])
+          return
+        }
+        
+      }
+
       setAnalyzed(data) // store the analyzed data in state { skin_type, concerns, goals}
+      setRetryCounts({})
 
       const summary = `Here is what I gathered:\n1. Detected Skin Type: ${data.skin_type}\n2. Detected Concerns: ${data.concerns.join(', ')}\n3. Detected Goals: ${data.goals.join(', ')}\nWant to change anything, or move on to your routine?`
       setMessages((prev) => [...prev, { sender: 'bot', text: summary }]) // add the summary to the messages

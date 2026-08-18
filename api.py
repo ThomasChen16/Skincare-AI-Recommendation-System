@@ -168,33 +168,46 @@ def analyze_profile(request: AnalyzeRequest):
     # parse the input data and extract the relevant information using extract_semantics()
     
     print("Received request")
+    missing_categories = []
     
     # Extract the input data from the request
     skin_type = extract_semantics(request.skin_text, "skin_type")
-    print("Skin type done")
-    
     concerns = extract_semantics(request.concerns_text, "concerns")
-    print("Concerns done")
-    
     goals = extract_semantics(request.goals_text, "goals")
-    print("Goals done")
     
-    # If unique_id is provided, save the analysis to their profile
+    # Check each category for missing data in one loop
+    categories = {
+        "skin_type": skin_type,
+        "concerns": concerns,
+        "goals": goals,
+    }
+    
+    # loop through if any empty
+    for category_name, category_value in categories.items():
+        if not category_value:  # Handles both "" and [] as falsy values
+            print(f"{category_name} is missing")
+            missing_categories.append(category_name)
+        else:
+            print(f"{category_name} done")
+    
+    # Only save if all categories are complete (no missing fields to prevent overwriting with empty values)
     saved = False
-    if request.unique_id:
+    if request.unique_id and not missing_categories:
         profile_data = {
             "skin_type": skin_type,
             "concerns": concerns,
-            "goals": goals
+            "goals": goals,
         }
         updated = update_user_profile(request.unique_id, profile_data)
         saved = updated is not None
+    
     
     # return as JSON response to the frontend
     return {
         "skin_type": skin_type,
         "concerns": concerns,
         "goals": goals,
+        "missing_categories": missing_categories,
         "saved": saved
     }
 

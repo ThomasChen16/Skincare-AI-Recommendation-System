@@ -5,7 +5,7 @@ from collections import defaultdict # for product score and reasons (less if sta
 import json # to load skin_info.json
 
 # ==================== ML Semantics ====================
-# Refernces description for each skin type, concern, and goal to compare user input to for semantic similarity
+# References description for each skin type, concern, and goal to compare user input to for semantic similarity
 
 # open skin_info json file and load skin reference data
 with open("data/skin_info.json", "r") as f:
