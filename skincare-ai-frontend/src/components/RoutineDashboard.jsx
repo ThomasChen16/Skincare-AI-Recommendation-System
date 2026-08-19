@@ -2,12 +2,13 @@
 import { useState, useEffect } from 'react'
 import FeedbackButtons from './FeedbackButtons'
 
-function RoutineDashboard({ profile, onEditProfile, amRoutine, pmRoutine, onGenerateRoutine, onFeedback, feedbackMap, user }) {
+function RoutineDashboard({ profile, onEditProfile, amRoutine, pmRoutine, onGenerateRoutine, onFeedback, onFetchCounts, feedbackMap, user }) {
     // local state for AM/PM routines
     const [loading, setLoading] = useState(false)
     const [error, setError] = useState(null)
     const [activeTime, setActiveTime] = useState(null) // 'a.m' or 'p.m' tracks which was last generated
     const [saved, setSaved] = useState(false) // track if routines were saved
+    const [feedbackCounts, setFeedbackCounts] = useState({}) // track feedback counts for product
     
     // DEBUG: Log props
     console.log('RoutineDashboard props:', { profile, amRoutine, pmRoutine })
@@ -19,7 +20,28 @@ function RoutineDashboard({ profile, onEditProfile, amRoutine, pmRoutine, onGene
       if ((amRoutine && amRoutine.length > 0) || (pmRoutine && pmRoutine.length > 0)) {
         setSaved(true)
       }
+
+      async function loadCounts() {
+        // Collect the product names used to look up aggregate feedback counts.
+        const productNames = [...(amRoutine || []), ...(pmRoutine || [])].map(item => item.product)
+        if (productNames.length === 0 || !onFetchCounts) return
+        // Fetch the counts and store them so the dashboard can display updated feedback data.
+        const counts = await onFetchCounts(productNames)
+        setFeedbackCounts(counts)
+      }
+      loadCounts()
     }, [amRoutine, pmRoutine])
+
+    // Re-fetch counts after the user submits feedback so the displayed numbers update immediately.
+    const handleFeedback = async (product, rating, routineTime) => {
+      await onFeedback(product, rating, routineTime)
+      if (onFetchCounts) {
+        const productNames = [...(amRoutine || []), ...(pmRoutine || [])].map(item => item.product)
+        const counts = await onFetchCounts(productNames)
+        setFeedbackCounts(counts)
+      }
+    }
+
 
     // Javascript object
     return (
@@ -76,7 +98,8 @@ function RoutineDashboard({ profile, onEditProfile, amRoutine, pmRoutine, onGene
                       routineTime='am'
                       user={user}
                       currentFeedback={feedbackMap[product.product]}
-                      onFeedback={onFeedback}
+                      onFeedback={handleFeedback}
+                      counts={feedbackCounts[product.product]}
                     />
                   </div>
                 ))}
@@ -99,7 +122,8 @@ function RoutineDashboard({ profile, onEditProfile, amRoutine, pmRoutine, onGene
                       routineTime='pm'
                       user={user}
                       currentFeedback={feedbackMap[product.product]}
-                      onFeedback={onFeedback}
+                      onFeedback={handleFeedback}
+                      counts={feedbackCounts[product.product]}
                     />
                   </div>
                 ))}

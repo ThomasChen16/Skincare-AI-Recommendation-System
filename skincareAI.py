@@ -556,3 +556,27 @@ def save_feedback(unique_id, product, product_type, rating, routine_time):
     # save and close
     conn.commit()
     conn.close()
+
+# get total count of feedback for the product
+def get_feedback_counts(product_names):
+    # connect to database
+    conn = get_connection()
+    
+    # create placeholders for SQL query (requests use to pull specific data from the table)
+    placeholders = ",".join("?" for _ in product_names)
+    
+    # query feedback table to count upvotes and downvotes for each product
+    rows = conn.execute(f"""
+        SELECT product,
+            SUM(CASE WHEN rating = 'upvote' THEN 1 ELSE 0 END) AS upvotes,
+            SUM(CASE WHEN rating = 'downvote' THEN 1 ELSE 0 END) AS downvotes
+        FROM feedback
+        WHERE product IN ({placeholders})
+        GROUP BY product
+    """, product_names).fetchall()
+    
+    # close connection
+    conn.close()
+    
+    # return dictionary with product feedback counts
+    return {row['product']: {'upvotes': row['upvotes'], 'downvotes': row['downvotes']} for row in rows}

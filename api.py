@@ -11,7 +11,7 @@ from datetime import datetime
 from retrieve_skin_info import extract_semantics, get_reference_embeddings, get_faiss_index
 from product_recommendation import get_faiss_scores, recommend_for_product_type
 from routine import build_routine
-from skincareAI import load_profiles, save_profiles, get_user_profile, create_user_profile, update_user_profile, save_feedback
+from skincareAI import load_profiles, save_profiles, get_user_profile, create_user_profile, update_user_profile, save_feedback, get_feedback_counts
 from database import init_db
 
 
@@ -21,7 +21,13 @@ app = FastAPI()
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:5173"],
+    allow_origins=[
+        "http://localhost:5173",
+        "http://localhost:5174",
+    ],
+    # Accept the app from any localhost/127.0.0.1 port (Vite auto-increments
+    # the port when 5173 is busy), so CORS can't break on dev-server port changes
+    allow_origin_regex=r"https?://(localhost|127\.0\.0\.1)(:\d+)?",
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -303,16 +309,27 @@ class FeedbackRequest(BaseModel):
 @app.post("/feedback")
 def submit_feedback(request: FeedbackRequest):
     
-    # validate rating in upvote or downvote format and routime_time in am or pm format
+    # validate rating in upvote or downvote format and routine_time in am or pm format
     if request.rating not in ["upvote", "downvote"]:
         raise HTTPException(status_code=400, detail="Invalid rating. Must be 'upvote' or 'downvote'")
     
-    if request.routine_time not in ["a.m", "p.m"]:
+    # Accept both 'am'/'pm' and 'a.m'/'p.m' from the frontend, and normalize before saving
+    # so the stored data stays consistent with the rest of the backend
+    routine_time_map = {"am": "a.m", "pm": "p.m", "a.m": "a.m", "p.m": "p.m"}
+    if request.routine_time not in routine_time_map:
         raise HTTPException(status_code=400, detail="Invalid routine time. Must be 'a.m' or 'p.m'")
+    routine_time = routine_time_map[request.routine_time]
     
     # Append the new entry    
-    save_feedback(request.unique_id, request.product, request.product_type, request.rating,  request.routine_time)
+    save_feedback(request.unique_id, request.product, request.product_type, request.rating, routine_time)
     
     return {"message": "Feedback submitted successfully"}
 
+# Define request model for the feedback count endpoint
+class ProductNamesRequest(BaseModel):
+    product_names: list[str]
 
+# Define the feedback count enpoint to process the count of thumb ups/thumbs down on products
+@app.post("/feedback/counts")
+def feedback_counts(request: ProductNamesRequest):
+    return get_feedback_counts(request.product_names)

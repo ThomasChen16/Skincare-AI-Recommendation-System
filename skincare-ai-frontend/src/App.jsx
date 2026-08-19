@@ -1,4 +1,4 @@
-import LoginScreen from './components/LoginScreen'
+﻿import LoginScreen from './components/LoginScreen'
 import ChatMessage from './components/ChatMessage'
 import ChatWindow from './components/ChatWindow'
 import RoutineDashboard from './components/RoutineDashboard'
@@ -48,7 +48,7 @@ function App() {
       
       if (data.type === 'create') {
         // Create new account - backend will generate unique_id
-        response = await fetch("http://localhost:8000/login", {
+        response = await fetch("http://127.0.0.1:8000/login", {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
@@ -58,7 +58,7 @@ function App() {
         })
       } else {
         // Login with existing unique_id
-        response = await fetch("http://localhost:8000/login", {
+        response = await fetch("http://127.0.0.1:8000/login", {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
@@ -110,7 +110,7 @@ function App() {
   async function logout() {
     try {
       // fetch() browser function to make HTTP request
-      await fetch('http://localhost:8000/logout', {
+      await fetch('http://127.0.0.1:8000/logout', {
         method: 'POST'
       })
 
@@ -142,7 +142,7 @@ function App() {
 
     try {
       // fetch() browser function to make HTTP request
-      const response = await fetch(`http://localhost:8000/profile/${user.unique_id}`)
+      const response = await fetch(`http://127.0.0.1:8000/profile/${user.unique_id}`)
 
       // read the response body and converts JSON to Javascript object
       const data = await response.json()
@@ -351,7 +351,7 @@ function App() {
   // analzye the user's answers by calling the backend API and display the results
   async function callAnalyze(rawAnswers, answeredField) {
     try {
-      const response = await fetch("http://localhost:8000/analyze", {
+      const response = await fetch("http://127.0.0.1:8000/analyze", {
         method: "POST",
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -403,7 +403,7 @@ function App() {
 
   // takes user from the dashboad back into chat through stage 'result'
   function handleEditProfile() {
-    setMessages((prev) => [...prev, { sender: 'bot', text: 'Back to your profile — want to change anything else, or head to your routine again?'}])
+    setMessages((prev) => [...prev, { sender: 'bot', text: 'Back to your profile â€” want to change anything else, or head to your routine again?'}])
     setStage('results')
   }
 
@@ -413,7 +413,7 @@ function App() {
 
     try {
         // fetch() browser function that makes HTTP request
-        const response = await fetch("http://localhost:8000/recommend", {
+        const response = await fetch("http://127.0.0.1:8000/recommend", {
           method: "POST", // sending data to server
           headers: { 'Content-Type': 'application/json' }, // tell server we're sending JSON
           body: JSON.stringify({ // convert data to JSON string and send it to request body
@@ -449,22 +449,51 @@ function App() {
     setFeedbackMap(prev => ({ ...prev, [key]: rating }))
 
     try {
-      await fetch("http://localhost:8000/feedback", {
+      const response = await fetch("http://127.0.0.1:8000/feedback", {
         method: "POST",
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           unique_id: user.unique_id,
           product: product.product,
-          product_type: product.product_type,
+          product_type: product.type,
           rating: rating == 'up' ? 'upvote' : 'downvote',
-          routine_time: routineTime
+          routine_time: routineTime === 'am' ? 'a.m' : 'p.m'
         })
       })
+      // Surface backend rejections instead of silently ignoring them
+      if (!response.ok) {
+        console.error("Feedback submission failed:", response.status, await response.text())
+      }
     } catch (error) {
+      console.error("Feedback submission error:", error)
       setFeedbackMap(prev => ({ ...prev, [key]: null }))
     }
   }
 
+  // fetch feedback counts for a product
+  async function fetchFeedbackCounts(productNames) {
+    try {
+      // Send POST request to backend with product names
+      const response = await fetch("http://127.0.0.1:8000/feedback/counts", {
+        method: "POST",
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ product_names: productNames})
+      })
+      // Surface backend rejections instead of silently ignoring them
+      if (!response.ok) {
+        console.error("Fetch feedback counts failed:", response.status, await response.text())
+        return {}
+      }
+      // Parse JSON response containing feedback counts (upvotes/downvotes)
+      const data = await response.json()
+      // Return the feedback counts data
+      return data
+    } catch (error) {
+      console.error("Fetch feedback counts error:", error)
+      setError("Failed to fetch feedback counts: " + error.message)
+      return {}
+    }
+  }
 
   return (
     <div className="app">
@@ -493,6 +522,7 @@ function App() {
             pmRoutine={pmRoutine}
             onGenerateRoutine={generateRoutine}
             onFeedback={handleFeedback}
+            onFetchCounts={fetchFeedbackCounts}
             feedbackMap={feedbackMap}
             user={user}
           />
