@@ -5,17 +5,17 @@
 # sunscreen
 # treatment/serum
 Product_Rules = {
-    "cleanser": {
+    "Cleanser": {
         "essential": True,
         "max": 1,
         "order": 1
     },
-    "toner": {
+    "Toner": {
         "essential": False,
         "max": 1,
         "order": 2
     },
-    "treatment": {
+    "Treatment": {
         "essential": False,
         "max": 3,
         "order": 3,
@@ -34,17 +34,17 @@ Product_Rules = {
             }
         }
     },
-    "moisturizer": {
+    "Moisturizer": {
         "essential": True,
         "max": 1,
         "order": 4
     },
-    "facial_oil": {
+    "Oil / Facial Oil": {
         "essential": False,
         "max": 1,
         "order": 5
     },
-    "sunscreen": {
+    "Sunscreen": {
         "essential": True,
         "max": 1,
         "order": 6,
@@ -78,7 +78,7 @@ def build_routine(context):
             # count is how many products of that type we want to recommend
             count = 1
         else:
-            if product_type == "treatment":
+            if product_type == "Treatment":
                 # acne and brightening are the only concerns that would require more than 1 treatment product
                 if "acne" in context["concerns"] or "brightening" in context["concerns"]:
                     count = 2

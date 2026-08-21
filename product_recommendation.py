@@ -11,7 +11,61 @@ import json # get product_info data from json
 with open("data/product.json", "r") as f:
     Product_Info = json.load(f)
 
+# ============ CATEGORY MAPPING ============
+# Bridge between two product "vocabularies":
+#   - the routine category keys produced by build_routine() (e.g. "Cleanser")
+#   - the "type"/"category" values stored in the product data source.
+#
+# The live source (data/product.json) already uses canonical lowercase types
+# (cleanser, toner, treatment, moisturizer, facial_oil, sunscreen). When the
+# app is switched over to the real dataset (data/products_clean.csv), its
+# categories are capitalized and differently spelled ("Moisturiser", "Oil",
+# "Serum", ...) and MUST go through this map.
+DATASET_TO_RULE = {
+    # products_clean.csv category -> canonical routine key
+    "Cleanser":     "cleanser",
+    "Toner":        "toner",
+    "Serum":        "treatment",     # dataset lumps all serums under one name
+    "Moisturiser":  "moisturizer",   # note British spelling (s, not z)
+    "Moisturizer":  "moisturizer",
+    "Oil":          "facial_oil",
+}
+
+# Routine rule/display names -> canonical key, so the renamed Product_Rules
+# keys in routine.py ("Cleanser", "Oil / Facial Oil", ...) all resolve to the
+# same canonical token as the dataset mapping above.
+RULE_ALIASES = {
+    "cleanser":        "cleanser",
+    "toner":           "toner",
+    "treatment":       "treatment",
+    "moisturizer":     "moisturizer",
+    "facial_oil":      "facial_oil",
+    "facial oil":      "facial_oil",
+    "oil":             "facial_oil",
+    "oil / facial oil": "facial_oil",
+    "oil facial oil":  "facial_oil",
+    "sunscreen":       "sunscreen",
+}
+
+# Converts a category name to its canonical key for consistent comparisons.
+def _canonical(category):
+    # Lowercase a category and normalize "Oil / Facial Oil" -> "oil facial oil"
+    # so both dataset and routine names can be compared on a shared token.
+    value = str(category).strip().lower()
+    normalized = " ".join(value.replace("/", " ").replace("&", " ").split())
+    return RULE_ALIASES.get(value) or RULE_ALIASES.get(normalized) or normalized
+
+def _matches_category(rule_category, product_type):
+    # Translate the data source's category to a canonical routine key
+    # (e.g. CSV "Oil" -> "facial_oil"), then compare case-insensitively
+    # against the routine's category key.
+    data_canonical = DATASET_TO_RULE.get(str(product_type).strip(), str(product_type).strip())
+    return _canonical(rule_category) == _canonical(data_canonical)
+
+
 # function to recommend products for a given product type category 
+# Checks whether a product's dataset type matches the requested routine category
+# by converting both values to their canonical category keys.
 def recommend_for_product_type(category, context, faiss_scores, count = 1):
     
     normalized_faiss_scores = normalize_faiss_scores(faiss_scores)
@@ -19,7 +73,7 @@ def recommend_for_product_type(category, context, faiss_scores, count = 1):
     # Fill one product type at a time based on the routine blueprint and product rules
     candidates = []
     for product_name, product_details in Product_Info.items():
-        if product_details["type"] == category:
+        if _matches_category(category, product_details["type"]):
             candidates.append((product_name, product_details))
     
     # calculate coverage score for each candidate product based on how well it addresses the user's skin type, concerns, and goals
