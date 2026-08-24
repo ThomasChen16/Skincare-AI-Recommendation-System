@@ -37,6 +37,7 @@ DATASET_TO_RULE = {
 RULE_ALIASES = {
     "cleanser":        "cleanser",
     "toner":           "toner",
+    "serum":           "treatment",     # routine "Serum" resolves to the same key as dataset "Serum"
     "treatment":       "treatment",
     "moisturizer":     "moisturizer",
     "facial_oil":      "facial_oil",
@@ -109,7 +110,8 @@ def recommend_for_product_type(category, context, faiss_scores, count = 1):
             "type": product["info"]["type"],
             "raw_score": product["score"],
             "score": product["normalized_score"],
-            "reason": generate_reasoning(product["info"], context)
+            "reason": generate_reasoning(product["info"], context),
+            "info": product["info"]
         })
         print(product["product"], product["score"], product["normalized_score"])
         

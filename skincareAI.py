@@ -540,6 +540,8 @@ def have_conversation():
 
 
 # save feedback of products when displaying routine
+# Replaces (not appends to) any existing vote this user left on the product, so
+# changing feedback (e.g. upvote -> downvote) does not keep the old row around.
 def save_feedback(unique_id, product, product_type, rating, routine_time):
     # connect to database
     conn = get_connection()
@@ -547,7 +549,14 @@ def save_feedback(unique_id, product, product_type, rating, routine_time):
     # cursor to write SQL commands
     cursor = conn.cursor()
     
-    # insert feedback into feedback table
+    # remove the user's previous vote for this product (if any) first, so the new
+    # vote below replaces it instead of adding an extra row that inflates counts
+    cursor.execute(
+        "DELETE FROM feedback WHERE unique_id = ? AND product = ?",
+        (unique_id, product),
+    )
+    
+    # insert this feedback into feedback table
     cursor.execute("""
         INSERT INTO feedback (unique_id, product, product_type, rating, routine_time)
         VALUES (?, ?, ?, ?, ?)

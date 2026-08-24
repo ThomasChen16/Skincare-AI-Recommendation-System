@@ -13,6 +13,7 @@ from product_recommendation import get_faiss_scores, recommend_for_product_type
 from routine import build_routine
 from skincareAI import load_profiles, save_profiles, get_user_profile, create_user_profile, update_user_profile, save_feedback, get_feedback_counts
 from database import init_db
+from real_products import find_real_product_matches
 
 
 # Initialize the FastAPI application
@@ -257,25 +258,29 @@ def recommend(request: RecommendRequest):
     for product_type in am_blueprint:
         # for each product type in routine_blueprint get specific product recommendations
         products = recommend_for_product_type(product_type["category"], am_context, faiss_score, product_type["count"])
+        # for each real product type get specific real product
+        real_products = attach_real_products(products, am_context)
         
         # extend recommend_routine with products while avoiding duplicates
-        recommend_routine.extend(products)
+        recommend_routine.extend(real_products)
         
         # Add to AM routine
         if product_type["time"] == "am":
-            am_routine.extend(products)
+            am_routine.extend(real_products)
     
     # Process PM routine blueprint
     for product_type in pm_blueprint:
         # for each product type in routine_blueprint get specific product recommendations
         products = recommend_for_product_type(product_type["category"], pm_context, faiss_score, product_type["count"])
+        # for each real product type get specific real product
+        real_products = attach_real_products(products, pm_context)
         
         # extend recommend_routine with products while avoiding duplicates
-        recommend_routine.extend(products)
+        recommend_routine.extend(real_products)
         
         # Add to PM routine
         if product_type["time"] == "pm":
-            pm_routine.extend(products)
+            pm_routine.extend(real_products)
     
     # If unique_id is provided, save the routine to their profile
     saved = False
@@ -294,6 +299,18 @@ def recommend(request: RecommendRequest):
         "pm_routine": pm_routine,
         "saved": saved
     }
+
+def attach_real_products(products, user_context):
+    # loop through products
+    for prod in products:
+        prod["real_products"] = find_real_product_matches(
+            prod.get('info', {}),  # placeholder info (description + type)
+            prod['type'],           # category
+            user_context,           # user context (skin_type, concerns, goals, time)
+            top_n=20                # up to 20 results so the "See more" UI has content
+        )
+    
+    return products
 
 # Define the request model for the feedback endpoint
 # Define the data the API expects to receive from the frontend
