@@ -26,6 +26,7 @@ function App() {
   const [amRoutine, setAmRoutine] = useState([]) // store user's amRoutine
   const [pmRoutine, setPmRoutine] = useState([]) // store user's pmRoutine
   const [error, setError] = useState(null)
+  const [routineLoading, setRoutineLoading] = useState(false) // true while the /recommend request is in flight
   const [generatedId, setGeneratedId] = useState(null) // generate unique_id for new users
   const [logoutUser, setLogoutUser] = useState(null) // store user data for logout screen
   const profileLoadAttempted = useRef(false) // track if we've attempted to load profile
@@ -403,14 +404,19 @@ function App() {
 
   // takes user from the dashboad back into chat through stage 'result'
   function handleEditProfile() {
-    setMessages((prev) => [...prev, { sender: 'bot', text: 'Back to your profile â€” want to change anything else, or head to your routine again?'}])
+    setMessages((prev) => [...prev, { sender: 'bot', text: 'Back to your profile — want to change anything else, or head to your routine again?'}])
     setStage('results')
   }
 
   // generate am and pm routine by calling the backend API and display the results
   async function generateRoutine() {
-    if (!analyzed || !user) return // make sure user input is analyzed and user is logged in
+    if (!analyzed || !user) {
+      setError("Please make sure your profile is analyzed and you are logged in before generating a routine.")
+      return // make sure user input is analyzed and user is logged in
+    }
 
+    setError(null)       // clear any previous error
+    setRoutineLoading(true) // show loading state on the button while the request is in flight
     try {
         // fetch() browser function that makes HTTP request
         const response = await fetch("http://127.0.0.1:8000/recommend", {
@@ -425,6 +431,10 @@ function App() {
           }),
         })
 
+        if (!response.ok) {
+          throw new Error(`Server responded with ${response.status}`)
+        }
+
         // read the response body and converts the JSON to JavaScript object
         const data = await response.json()
 
@@ -434,6 +444,8 @@ function App() {
 
     } catch (error) {
       setError("Something went wrong generating your routine: " + error.message)
+    } finally {
+      setRoutineLoading(false) // always turn off the loading state when done
     }
   }
 
@@ -521,6 +533,8 @@ function App() {
             amRoutine={amRoutine}
             pmRoutine={pmRoutine}
             onGenerateRoutine={generateRoutine}
+            routineLoading={routineLoading}
+            routineError={error}
             onFeedback={handleFeedback}
             onFetchCounts={fetchFeedbackCounts}
             feedbackMap={feedbackMap}

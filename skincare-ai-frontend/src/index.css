@@ -729,6 +729,18 @@ body {
   background: var(--blue-700);
 }
 
+.generate-routine-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.routine-error {
+  color: #c0392b;
+  font-size: 14px;
+  margin-top: var(--space-2);
+  margin-bottom: 0;
+}
+
 .routines-container {
   display: flex;
   flex-direction: row;
@@ -1028,4 +1040,28 @@ html {
   font-weight: 600;
   margin-left: 4px;
   vertical-align: middle;
+}
+
+/*Real product list */
+.real-product-card a {
+  color: #2c7;
+  text-decoration: none;
+}
+
+.rp-reason {
+  font-size: .85em;
+  color: #555;
+}
+
+.rp-ingredients {
+  font-size: .8em;
+  color: #888;
+  max-height: 90px;
+  overflow-y: auto;
+}
+
+.rp-more-scroll {
+  max-height: 180px;
+  overflow-y: auto;
+  margin-top: 8px;
 }
