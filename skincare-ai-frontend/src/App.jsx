@@ -3,6 +3,7 @@ import ChatMessage from './components/ChatMessage'
 import ChatWindow from './components/ChatWindow'
 import RoutineDashboard from './components/RoutineDashboard'
 import LogoutScreen  from './components/LogoutScreen'
+import Navbar from './components/NavBar'
 import { useState, useEffect, useRef } from 'react' // how react switches between UI using useState and side effects tthat happen outside standard rendering flow using useEffect
 
 const questions = [
@@ -33,6 +34,7 @@ function App() {
   const currentStageRef = useRef(stage) // track current stage to avoid stale closures
   const [feedbackMap, setFeedbackMap] = useState({}) // track feedback for each product
   const [retryCounts, setRetryCounts] = useState({}) // track the number of attempts in retry followup questions
+  const [activeScreen, setActiveScreen] = useState('login') // track the current active/visible screen
   
   // Update the ref whenever stage changes
   useEffect(() => {
@@ -87,6 +89,7 @@ function App() {
       setGeneratedId(null)
       setStage('login') // Reset stage so loadSavedProfile can transition to 'routine'
       
+      
       // set user state data
       setUser(userData)
 
@@ -95,6 +98,7 @@ function App() {
         setGeneratedId(userData.unique_id)
         // set stage to 'asking' for new users
         setStage('asking')
+        setActiveScreen('chat')
       }
       // For existing users, loadSavedProfile will set the appropriate stage
 
@@ -130,6 +134,7 @@ function App() {
 
       // set stage to 'logout'
       setStage('logout')
+      setActiveScreen('logout')
     } catch (error) {
       console.log('Logout failed', error)
       setError('Logout failed. Please try again.')
@@ -188,6 +193,9 @@ function App() {
           }
           return prevStage
         })
+        // Show the matching top-level screen: routine dashboard if the account
+        // has saved data, otherwise the chat screen.
+        setActiveScreen((hasAnalysis || hasRoutine) ? 'routine' : 'chat')
       } else {
         console.log('No profile found for this id:', user.unique_id) // DEBUG
       }
@@ -285,11 +293,23 @@ function App() {
       setStep(step + 1) // move to the next question
 
     } else {
-      // if it's the last question, dsplay a message analzing the answers
+      // if it's the last question, dsplay a messa.e analzing the answers
       setMessages([...messages, userMessage, { sender: 'bot', text: 'Analyzing your answers...' }])
       await callAnalyze(newAnswers)
     }
 
+  }
+
+  // true once a routine exist - soft gates the Shop tab till then
+  const hasRoutine = (amRoutine && amRoutine.length > 0 || pmRoutine && pmRoutine.length > 0)
+
+  // navigate between the top-level screens from the nav bar
+  function handleNavigate(screen) {
+    // jump to Chat after a profile exist -> show the summary again
+    if (screen === 'chat' && analyzed) {
+      setStage('results')
+    }
+    setActiveScreen(screen)
   }
 
   // handle to follow up questions when fields (skin_type, concerns, goals) return empty
@@ -325,6 +345,7 @@ function App() {
       const botMessage = { sender: 'bot', text: 'Great! Taking you to your routine dashboard.' }
       setMessages([...messages, { sender: 'user', text}, botMessage])
       setStage('routine')
+      setActiveScreen('routine') // because changing screens
 
     } else {
       // if user input isn't recognized, ask to clarify
@@ -406,6 +427,7 @@ function App() {
   function handleEditProfile() {
     setMessages((prev) => [...prev, { sender: 'bot', text: 'Back to your profile — want to change anything else, or head to your routine again?'}])
     setStage('results')
+    setActiveScreen('chat') // going back to chat screen
   }
 
   // generate am and pm routine by calling the backend API and display the results
@@ -441,6 +463,7 @@ function App() {
         setAmRoutine(data.am_routine)
         setPmRoutine(data.pm_routine)
         setStage('routine')
+        setActiveScreen('routine') // going to routine
 
     } catch (error) {
       setError("Something went wrong generating your routine: " + error.message)
@@ -509,10 +532,12 @@ function App() {
 
   return (
     <div className="app">
-      {stage !== 'login' && <h1>Skin assistant</h1>}
+      {activeScreen !== 'login' && activeScreen !== 'logout' && (
+        <Navbar activeScreen={activeScreen} onNavigate={handleNavigate} hasRoutine={hasRoutine} />
+      )}
 
-      {stage == 'login' && (
-        <LoginScreen 
+      {activeScreen === 'login' && (
+        <LoginScreen
           onLogin={handleLogin}
           mode={loginMode}
           setMode={setLoginMode}
@@ -521,7 +546,21 @@ function App() {
         />
       )}
 
-      {stage === 'routine' && (
+      {activeScreen === 'chat' && (
+        <div>
+          <div className='user-info'>
+            <span>Welcome, {user?.name}</span>
+            <button onClick={logout}>Logout</button>
+          </div>
+          <ChatWindow onSend={handleSend}>
+          {messages.map((msg, index) => (
+            <ChatMessage key={index} sender={msg.sender} text={msg.text} />
+          ))}
+        </ChatWindow>
+        </div>
+      )}
+
+      {activeScreen === 'routine' &&  (
         <div>
           <div className='user-info'>
             <span>Welcome, {user?.name}</span>
@@ -543,23 +582,18 @@ function App() {
         </div>
       )}
 
-      {(stage==='asking' || stage==='results' || stage==='awaiting_change_field') && (
-        <div>
-          <div className='user-info'>
-            <span>Welcome, {user?.name}</span>
-            <button onClick={logout}>Logout</button>
-          </div>
-          <ChatWindow onSend={handleSend}>
-          {messages.map((msg, index) => (
-            <ChatMessage key={index} sender={msg.sender} text={msg.text} />
-          ))}
-        </ChatWindow>
+      {activeScreen === 'shop' && (
+        <div className='shop-screen'>
+          <h2>Shop</h2>
+          {hasRoutine
+          ? <p>Personalized products for your routine will appear here.</p>
+          : <p>Build your routine first - personalized products will show up here once you have one.</p>}
         </div>
       )}
-
-      {stage==='logout' && (
+      
+      {activeScreen === 'logout' && (
         <LogoutScreen
-          setMode={setStage}
+          setMode={setActiveScreen}
           error={error}
           unique_id={logoutUser?.unique_id}
           name={logoutUser?.name}
