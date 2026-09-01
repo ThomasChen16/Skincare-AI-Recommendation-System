@@ -1,9 +1,8 @@
 // design for displaying routine with buttons for morning and night after finishing chat function
 import { useState, useEffect } from 'react'
 import FeedbackButtons from './FeedbackButtons'
-import RealProductsList from './RealProductsList'
 
-function RoutineDashboard({ profile, onEditProfile, amRoutine, pmRoutine, onGenerateRoutine, routineLoading, routineError, onFeedback, onFetchCounts, feedbackMap, user }) {
+function RoutineDashboard({ profile, amRoutine, pmRoutine, onGenerateRoutine, routineLoading, routineError, onFeedback, onFetchCounts, feedbackMap, user }) {
     // local state for AM/PM routines
     const [loading, setLoading] = useState(false)
     const [error, setError] = useState(null)
@@ -64,7 +63,6 @@ function RoutineDashboard({ profile, onEditProfile, amRoutine, pmRoutine, onGene
               <p><strong>Skin Type:</strong> {profile.skin_type}</p>
               <p><strong>Concerns:</strong> {profile.concerns?.join(', ') || 'None'}</p>
               <p><strong>Goals:</strong> {profile.goals?.join(', ') || 'None'}</p>
-              <button onClick={onEditProfile}>Edit Profile</button>
             </>
           ) : (
             <p>Loading profile...</p>
@@ -105,7 +103,6 @@ function RoutineDashboard({ profile, onEditProfile, amRoutine, pmRoutine, onGene
                         onFeedback={handleFeedback}
                         counts={feedbackCounts[product.product]}
                       />
-                      <RealProductsList product={product}/>
                     </div>
                   ))}
                 </div>
@@ -130,7 +127,6 @@ function RoutineDashboard({ profile, onEditProfile, amRoutine, pmRoutine, onGene
                         onFeedback={handleFeedback}
                         counts={feedbackCounts[product.product]}
                       />
-                      <RealProductsList product={product}/>
                     </div>
                   ))}
                 </div>

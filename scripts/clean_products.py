@@ -4,12 +4,13 @@ import os
 
 # resolve paths relative to this script's location
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))           # ...\skincare_AI\scripts
+RAW_PATH = os.path.join(os.path.dirname(BASE_DIR, "data", "skincare_products_clean.csv")) # ...\skincare_AI\data\skincare_products_clean.csv
 DATA_PATH = os.path.join(os.path.dirname(BASE_DIR), "data", "products_clean.csv")  # ...\skincare_AI\data\products_clean.csv
 
 # Read the raw CSV and produce a normalized version for the application.
 KNOWN_MULTIWORD_BRANDS = ["The Ordinary", "La Roche-Posay", "Paula's Choice", "First Aid Beauty", "Drunk Elephant"]
 
-df = pd.read_csv(DATA_PATH)
+df = pd.read_csv(RAW_PATH)
 
 # rename columns to match schema
 df = df.rename(columns={
@@ -52,7 +53,7 @@ def gbp_to_usd(price_str):
         return price_str # leave non-numeric/unparseable values as is
 
     # return converted value in USD with two decimal places
-    return f"${amount * GBP_TO_USD:,.2f}"
+    return f"≈${amount * GBP_TO_USD:,.2f}"
 
 df["ingredients"] = df["ingredients"].apply(parse_ingredients)
 

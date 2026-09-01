@@ -4,6 +4,7 @@ import ChatWindow from './components/ChatWindow'
 import RoutineDashboard from './components/RoutineDashboard'
 import LogoutScreen  from './components/LogoutScreen'
 import Navbar from './components/NavBar'
+import ShopScreen from './components/ShopScreen'
 import { useState, useEffect, useRef } from 'react' // how react switches between UI using useState and side effects tthat happen outside standard rendering flow using useEffect
 
 const questions = [
@@ -308,6 +309,11 @@ function App() {
     // jump to Chat after a profile exist -> show the summary again
     if (screen === 'chat' && analyzed) {
       setStage('results')
+      // only re-orient the user when they're coming FROM the Routine dashboard,
+      // just like the old "Edit Profile" button did — not on every tab click
+      if (activeScreen === 'routine') {
+        setMessages((prev) => [...prev, { sender: 'bot', text: 'Back to your profile — want to change anything else, or head to your routine again?'}])
+      }
     }
     setActiveScreen(screen)
   }
@@ -421,13 +427,6 @@ function App() {
     } catch (error) {
       setMessages((prev) => [...prev, { sender: 'bot', text: 'Sorry, there was an error analyzing your answers. Please try again.'}]) // error handling if API call fails
     }
-  }
-
-  // takes user from the dashboad back into chat through stage 'result'
-  function handleEditProfile() {
-    setMessages((prev) => [...prev, { sender: 'bot', text: 'Back to your profile — want to change anything else, or head to your routine again?'}])
-    setStage('results')
-    setActiveScreen('chat') // going back to chat screen
   }
 
   // generate am and pm routine by calling the backend API and display the results
@@ -568,7 +567,6 @@ function App() {
           </div>
           <RoutineDashboard
             profile={analyzed}
-            onEditProfile={handleEditProfile}
             amRoutine={amRoutine}
             pmRoutine={pmRoutine}
             onGenerateRoutine={generateRoutine}
@@ -583,11 +581,16 @@ function App() {
       )}
 
       {activeScreen === 'shop' && (
-        <div className='shop-screen'>
-          <h2>Shop</h2>
-          {hasRoutine
-          ? <p>Personalized products for your routine will appear here.</p>
-          : <p>Build your routine first - personalized products will show up here once you have one.</p>}
+        <div>
+          <div className='user-info'>
+            <span>Welcome, {user?.name}</span>
+            <button onClick={logout}>Logout</button>
+          </div>
+          <ShopScreen
+            amRoutine={amRoutine}
+            pmRoutine={pmRoutine}
+            onNavigate={handleNavigate}
+          />
         </div>
       )}
       

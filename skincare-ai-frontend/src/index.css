@@ -65,7 +65,7 @@
 }
 
 body {
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Inter', system-ui, sans-serif;
+  font-family: 'Manrope', -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Inter', system-ui, sans-serif;
   background: var(--white);
   color: var(--gray-900);
   line-height: 1.6;
@@ -1043,28 +1043,202 @@ html {
 }
 
 /*Real product list */
-.real-product-card a {
-  color: #2c7;
+.real_products {
+  margin-top: var(--space-5);
+  padding-top: var(--space-5);
+  border-top: 1px dashed var(--gray-200);
+}
+
+.rp-heading {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: var(--space-3);
+  margin-bottom: var(--space-4);
+}
+
+.rp-heading h5 {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--gray-800);
+  letter-spacing: -0.01em;
+}
+
+.rp-count {
+  flex-shrink: 0;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  color: var(--gray-500);
+  background: var(--gray-100);
+  border-radius: 999px;
+  padding: 3px 10px;
+}
+
+.rp-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+.real-product-card {
+  background: var(--white);
+  border: 1px solid var(--gray-200);
+  border-radius: var(--radius-md);
+  padding: var(--space-4) var(--space-5);
+  transition: border-color var(--transition-fast), box-shadow var(--transition-fast), transform var(--transition-fast);
+}
+
+.real-product-card:hover {
+  border-color: var(--gray-300);
+  box-shadow: var(--shadow-md);
+  transform: translateY(-1px);
+}
+
+.rp-card-top {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--space-4);
+}
+
+.rp-title-block {
+  min-width: 0;
+}
+
+.rp-brand {
+  display: block;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--gray-400);
+  margin-bottom: 2px;
+}
+
+.rp-name {
+  display: inline-flex;
+  align-items: baseline;
+  gap: var(--space-1);
+  font-size: 15px;
+  font-weight: 600;
+  line-height: 1.4;
+  color: #047857;
   text-decoration: none;
+  transition: color var(--transition-fast);
 }
 
-.rp-reason {
-  font-size: .85em;
-  color: #555;
+.rp-name:hover {
+  color: #065f46;
 }
 
-.rp-ingredients {
-  font-size: .8em;
-  color: #888;
-  max-height: 90px;
+.rp-ext {
+  font-size: 12px;
+  color: var(--gray-400);
+  transition: color var(--transition-fast), transform var(--transition-fast);
+}
+
+.rp-name:hover .rp-ext {
+  color: var(--gray-500);
+  transform: translate(1px, -1px);
+}
+
+.rp-price {
+  flex-shrink: 0;
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--gray-900);
+  background: var(--gray-50);
+  border: 1px solid var(--gray-200);
+  border-radius: var(--radius-sm);
+  padding: 2px 10px;
+  white-space: nowrap;
+}
+
+.rp-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  margin-top: var(--space-3);
+}
+
+.rp-chip {
+  display: inline-flex;
+  align-items: center;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.03em;
+  color: var(--blue-700);
+  background: var(--blue-50);
+  border: 1px solid var(--blue-100);
+  border-radius: 999px;
+  padding: 3px 10px;
+}
+
+.rp-chip-top {
+  color: var(--success);
+  background: var(--success-bg);
+  border-color: #a7f3d0;
+}
+
+.rp-ingredients-block {
+  margin-top: var(--space-3);
+  padding-top: var(--space-3);
+  border-top: 1px solid var(--gray-100);
+}
+
+.rp-ingredients-label {
+  display: block;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+  color: var(--gray-400);
+  margin-bottom: var(--space-1);
+}
+
+.real-product-card .rp-ingredients {
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--gray-500);
+  max-height: 110px;
   overflow-y: auto;
+  padding-right: var(--space-1);
 }
 
-.rp-more-scroll {
-  max-height: 180px;
-  overflow-y: auto;
-  margin-top: 8px;
+.rp-list-expanded .real-product-card .rp-ingredients {
+  max-height: none;
+  overflow: visible;
 }
+
+.rp-toggle-btn {
+  margin-top: var(--space-4);
+  width: 100%;
+  padding: var(--space-3) var(--space-4);
+  border-radius: var(--radius-md);
+  border: 1px solid var(--gray-200);
+  background: var(--gray-50);
+  color: var(--gray-700);
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all var(--transition-fast);
+}
+
+.rp-toggle-btn:hover {
+  background: var(--gray-100);
+  border-color: var(--gray-300);
+  color: var(--gray-900);
+}
+
+.rp-toggle-btn:active {
+  transform: translateY(1px);
+}
+
+/* ===================================
+   Navigation Bar
+   =================================== */
 
 .navbar {
   position: sticky;
@@ -1112,4 +1286,87 @@ html {
   border-radius: 999px;
   background: var(--gray-100);
   color: var(--gray-500);
+}
+
+/* ===================================
+   Shop Screen
+   =================================== */
+
+.shop-screen {
+  max-width: 1200px;
+  margin: var(--space-6) auto;
+  padding: 0 var(--space-6);
+}
+
+.shop-empty {
+  background: var(--white);
+  border: 1px solid var(--gray-200);
+  border-radius: var(--radius-lg);
+  padding: var(--space-8);
+  text-align: center;
+}
+
+.shop-empty h2 {
+  font-size: 18px;
+  font-weight: 600;
+  color: var(--gray-900);
+  margin-bottom: var(--space-4);
+}
+
+.shop-empty p {
+  font-size: 14px;
+  color: var(--gray-600);
+  margin-bottom: var(--space-2);
+  line-height: 1.5;
+}
+
+.shop-empty button {
+  margin-top: var(--space-4);
+  padding: var(--space-3) var(--space-5);
+  border-radius: var(--radius-md);
+  border: none;
+  background: var(--blue-600);
+  color: var(--white);
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background var(--transition-fast);
+}
+
+.shop-empty button:hover {
+  background: var(--blue-700);
+}
+/* Tabs: one per recommended product in the routine */
+.shop-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  margin-bottom: var(--space-4);
+}
+
+.shop-tab {
+  padding: var(--space-2) var(--space-4);
+  border-radius: var(--radius-md);
+  border: 1px solid transparent;
+  background: transparent;
+  color: var(--gray-600);
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all var(--transition-fast);
+}
+
+.shop-tab:hover {
+  background: var(--gray-50);
+  color: var(--gray-900);
+}
+
+.shop-tab.active {
+  background: var(--blue-50);
+  border-color: var(--blue-200);
+  color: var(--blue-700);
+}
+
+.shop-tab-content {
+  margin-top: var(--space-4);
 }

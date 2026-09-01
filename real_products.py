@@ -3,12 +3,60 @@ import pandas as pd
 import numpy as np
 import faiss
 from embedding_model import get_model
-from product_recommendation import _matches_category
+from product_recommendation import _matches_category, _canonical
 
 _real_products = None
 _real_product_embeddings = []
 _real_product_metadata = []
 _real_product_index = None
+
+
+# ---------------------------------------------------------------------------
+# Sunscreen special case: the real-product dataset has no "Sunscreen" category,
+# so SPF products are filed under Moisturiser/Serum/Oil/etc. The strict category
+# check (_matches_category) therefore rejects every candidate for the routine's
+# "Sunscreen" slot. Detect sunscreens by SPF branding or UV-filter ingredients
+# instead, and accept them for the Sunscreen category only.
+
+# UV-filter actives that mark a product as a sunscreen.
+SUNSCREEN_FILTERS = (
+    'homosalate',
+    'octocrylene',
+    'ethylhexyl salicylate',          # octisalate
+    'butyl methoxydibenzoylmethane',  # avobenzone
+    'benzophenone',                   # oxybenzone family
+    'phenylbenzimidazole sulfonic acid',
+    'zinc oxide',                         # mineral filters
+    'bis-ethylhexyloxyphenol methoxyphenyl triazine',      # Tinosorb S
+    'methylene bis-benzotriazolyl tetramethylbutylphenol', # Tinosorb M
+    'diethylhexyl butamido triazone',                      # Uvasorb HEB
+)
+
+# Dataset categories that legitimately carry face sunscreen products. Only these
+# are accepted for ingredient-based detection, so body wash/bath salts/masks
+# (which can contain trace pigments or filters) never appear in the Sunscreen tab.
+FACE_SPF_CATEGORIES = {'Moisturiser', 'Moisturizer', 'Serum', 'Oil', 'Toner'}
+
+
+def _is_sunscreen_product(candidate):
+    # Strong signal: the product name advertises SPF protection.
+    name = str(candidate.get('product') or '').lower()
+    if 'no spf' in name or 'without spf' in name:
+        return False
+    if 'spf' in name or 'sunscreen' in name or 'sun screen' in name:
+        return True
+
+    # Otherwise require a UV-filter active AND a plausible face category.
+    if candidate.get('category') not in FACE_SPF_CATEGORIES:
+        return False
+    ingredients = str(candidate.get('ingredients') or '').lower()
+    return any(f in ingredients for f in SUNSCREEN_FILTERS)
+
+
+# Category gate used in find_real_product_matches: strict category match first,
+# then the sunscreen content-based fallback for the routine's Sunscreen slot.
+def _is_sunscreen_match(rule_category, candidate):
+    return _canonical(rule_category) == 'sunscreen' and _is_sunscreen_product(candidate)
 
 # load real products from CSV
 def load_real_products(path="data/products_clean.csv"):
@@ -86,7 +134,7 @@ def find_real_product_matches(placeholder_product_info, category, context, top_n
     matches = []
     for score, idx in zip(scores[0], indices[0]):
         candidate = _real_product_metadata[idx]
-        if _matches_category(category, candidate['category']):
+        if _matches_category(category, candidate['category']) or _is_sunscreen_match(category, candidate):
             matches.append({
                 'product': candidate['product'],
                 'brand': candidate['brand'],
@@ -107,10 +155,10 @@ def find_real_product_matches(placeholder_product_info, category, context, top_n
 # Explain why a real product was selected as a match.
 def explain_match(real_product, context):
     # Check whether any user concerns appear in the product ingredients.
-    matched_terms = [c for c in context['concerns'] if c.lower() in real_product['ingredients'].lower()]
+    matched_terms = [c for c in context.get('concerns', []) if c.lower() in str(real_product['ingredients']).lower()]
     if matched_terms:
         return f"Ingredients relevant to: {', '.join(matched_terms)}"
     
-    # Use a general explanation when no concern-specific ingredient matches.
-    return "Matched based on overall similarity to the recommended products"
+    # No generic fallback needed - the frontend no longer shows this reason line.
+    return None
     
