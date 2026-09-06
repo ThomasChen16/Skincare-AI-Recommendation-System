@@ -5,3 +5,13 @@ __pycache__/
 *.faiss
 output.txt
 .huggingface/
+
+# Logs
+*.log
+
+# Local database (contains real user data - never commit) 
+data/feedback.db
+
+# Legacy JSON storage - no longer used by the app
+data/profile.json
+data/feedback.json

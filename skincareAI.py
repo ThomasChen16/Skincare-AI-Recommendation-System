@@ -1,6 +1,3 @@
-from collections import Counter
-from shlex import join
-import random # random number generator
 import json # for saving userProfile data
 import faiss # for faster similarity search
 import numpy as np
@@ -20,18 +17,7 @@ from routine import build_routine
 
 from embedding_model import load_model
 
-from database import get_connection
-
-# read json file
-#with open("profile.json", "r") as f:
-#    data = json.load(f)
-    
-# modify json file
-#data["users"]["1003"] = {"name": "Charile", "age": 30}
-
-# write back json file
-#with open("profile.json", "w") as f:
-#    json.dump(data, f, index=4)
+from database import get_connection, init_db
 
 # exit virtual environment: deactivate
 # re-enter virtual environment: venv\Scripts\activate
@@ -43,8 +29,6 @@ print("Loading AI model...")
 model = SentenceTransformer('all-MiniLM-L6-v2')
 print("Ready!\n")
 
-
-from collections import defaultdict # for product score and reasons (less if statements as keys are created on the go)
 
 # User Profile Class to store user info
 class UserProfile:
@@ -83,28 +67,10 @@ class UserProfile:
         elif time == "p.m":
             self.pm_routine = routine
 
-# JSON handling functions
-PROFILE_PATH = "data/profile.json"
-
-# load user profiles from profile.json
-def load_profiles():
-    try:
-        # open and read profile.json
-        with open(PROFILE_PATH, "r") as f:
-            return json.load(f)
-    except (FileNotFoundError, json.JSONDecodeError):
-        return {"users": {}}
-
-# save user profile into profile.json
-def save_profiles(profiles):
-    with open(PROFILE_PATH, "w") as f:
-        json.dump(profiles, f, indent=4)
-
 # generate unique_id for user
 def generate_unique_id():
     # connect to database
     conn = get_connection()
-    profiles = load_profiles()
     
     while True:
         new_id = secrets.token_hex(5) # 10-character hex string
@@ -115,7 +81,7 @@ def generate_unique_id():
             conn.close()
             return new_id
 
-# retrieve user data from profile.json
+# retrieve user data from the SQLite database
 def get_user_profile(unique_id, name=None):
     # connect to database
     conn = get_connection()
@@ -139,8 +105,6 @@ def get_user_profile(unique_id, name=None):
 
 # create new profile for new users
 def create_user_profile(name, unique_id=None):
-    profiles = load_profiles()
-    
     # Use the provided unique_id when available, otherwise generate a new one
     if unique_id:
         # only use the provided id if it is not already taken
@@ -311,6 +275,8 @@ def initialize():
     load_model()
     get_reference_embeddings()
     get_faiss_index()
+    # make sure the SQLite tables exist (same tables the web app uses)
+    init_db()
     
 
 # Main Conservation Function Loop
@@ -320,15 +286,6 @@ def have_conversation():
     print("Welcome to the Skincare AI Consultant!\n")
     print("Do you have an existing profile? (yes/no)")
     
-    
-    # open profile.json file and load exisiting data if any
-    # edge case: if file does not exist create it with empty user data
-    # edge case: if file is empty we should also handle that and create empty user data
-    try:
-        with open("data/profile.json", "r") as f:
-            existing_data = json.load(f)
-    except (FileNotFoundError, json.JSONDecodeError):
-        existing_data = {"users": {}}
     login_status = False    
     while not login_status:
         existing_profile = input("You: ").lower()
@@ -339,8 +296,9 @@ def have_conversation():
                 unique_id_input = input("Enter your unique ID: ")
         
                 # Add users data back into the UserProfile class and continue conversation
-                if unique_id_input in existing_data["users"]:
-                    user_data = existing_data["users"][unique_id_input]
+                # load the profile from the same SQLite database the web app uses
+                user_data = get_user_profile(unique_id_input)
+                if user_data is not None:
                     user_profile = UserProfile()
                     user_profile.unique_id = unique_id_input
                     user_profile.name = user_data.get("name")
@@ -390,16 +348,12 @@ def have_conversation():
         name_input = input("You: ")
         print()
         
-        # generate unique_id that is unique per user    
-        unique_id = 0
-        while True:
-            unique_id = random.randint(1000, 9999)
-            if unique_id not in existing_data["users"]:
-                user_profile.unique_id = unique_id
-                break 
-            
-        print(f"Nice to meet you {name_input}. Here is your unique ID to receive your profile: {unique_id}")
+        # create the new profile in the SQLite database and get its unique ID
+        unique_id, _ = create_user_profile(name_input)
+        user_profile.unique_id = unique_id
         user_profile.name = name_input
+        
+        print(f"Nice to meet you {name_input}. Here is your unique ID to receive your profile: {unique_id}")
     
         
     # Main Conversation Loop - gather user info and update profile
@@ -519,23 +473,19 @@ def have_conversation():
             adjust_user_profile(user_profile, "goals")
             print(f"Bot: Updated skin goals to {user_profile.goals}.")
         elif user_done in ["5", "five"]:
-            print(f"Bot: Thank you for using the Skincare AI Consultant! Have a great day!\nUse your unique ID: {user_profile.unique_id} to access your profile again.")
             data = {
-                    "name": user_profile.name,
-                    "skin_type": user_profile.skin_type,
-                    "concerns": user_profile.concerns,
-                    "goals": user_profile.goals,
-                    "am_routine": user_profile.am_routine,
-                    "pm_routine": user_profile.pm_routine
-                }
-            if str(user_profile.unique_id) in existing_data["users"]:
-                print("\nUpdating existing profile with new information...")
-            # append new user data to file
-            existing_data["users"][str(user_profile.unique_id)] = data
-            
-            # write data back to json file
-            with open("data/profile.json", "w") as f:
-                json.dump(existing_data, f, indent=4)
+                "skin_type": user_profile.skin_type,
+                "concerns": user_profile.concerns,
+                "goals": user_profile.goals,
+                "am_routine": user_profile.am_routine,
+                "pm_routine": user_profile.pm_routine
+            }
+            print("\nUpdating your profile in the database...")
+            updated = update_user_profile(user_profile.unique_id, data)
+            if updated:
+                print(f"Bot: Thank you for using the Skincare AI Consultant! Have a great day!\nUse your unique ID: {user_profile.unique_id} to access your profile again.")
+            else:
+                print("Bot: Sorry, something went wrong saving your profile. Please try again.")
             break
 
 
